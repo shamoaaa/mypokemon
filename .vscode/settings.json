@@ -1,0 +1,11 @@
+{
+    "terminal.integrated.env.windows": {
+        "PYTHONPATH": "F:\\bigmodel\\mypokemon"
+    },
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "F:\\bigmodel\\mypokemon"
+    },
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "F:\\bigmodel\\mypokemon"
+    }
+}
