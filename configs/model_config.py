@@ -8,10 +8,10 @@ MAX_TOKENS = 4096
 STREAM = True
 
 # 默认启动的模型，如果使用的是glm3-6b，请替换模型名称
-LLM_MODELS = ["Doubao-pro-256k-1.5"]
-MODEL_API_KEY = 'sk-36oMlDApF5Nlg0v23014A4B69e864000944151Cd75D82076'
+LLM_MODELS = ["Doubao-pro-256k-1.5", "deepseekv3", "deepseeekr1","deepseek-poke"]
+MODEL_API_KEY = ''
 MODEL_API_BASE = 'http://139.224.116.116:3000/v1'
-
+OLLAMA_API_BASE = "http://localhost:11434/v1"
 
 # 选用的 Embedding 名称
 EMBEDDING_MODEL = "bge-m3-pro"
@@ -29,4 +29,4 @@ SEARCH_ENGINE_TOP_K = 3
 SEARCH_RERANK_TOP_K = 8
 
 URL = "https://google.serper.dev/search"
-SERPER_API_KEY = '25e9d44471387624110f9d83e9a4e9c68136aad9'  # 这里替换为自己实际的Serper API Key
+SERPER_API_KEY = ''  # 这里替换为自己实际的Serper API Key

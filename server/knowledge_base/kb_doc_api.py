@@ -99,8 +99,7 @@ async def update_docs(
         chunk_overlap: int = Body(OVERLAP_SIZE, description="知识库中相邻文本重合长度"),
         zh_title_enhance: bool = Body(ZH_TITLE_ENHANCE, description="是否开启中文标题加强"),
         override_custom_docs: bool = Body(False, description="是否覆盖之前自定义的docs"),
-        docs: Json = Body({}, description="自定义的docs，需要转为json字符串",
-                          examples=[{"test.txt": [Document(page_content="custom doc")]}]),
+        docs: str = Body({}, description="自定义的docs，需要转为json字符串"),
         not_refresh_vs_cache: bool = Body(False, description="暂不保存向量库（用于FAISS）"),
 ) -> BaseResponse:
     """
@@ -122,7 +121,7 @@ async def update_docs(
         # 如果该文件之前使用了自定义docs，则根据参数决定略过或覆盖
         if file_detail.get("custom_docs") and not override_custom_docs:
             continue
-        if file_name not in docs:
+        if file_name not in []:
             try:
                 kb_files.append(KnowledgeFile(filename=file_name, knowledge_base_name=knowledge_base_name))
             except Exception as e:
@@ -148,16 +147,16 @@ async def update_docs(
             failed_files[file_name] = error
 
     # 将自定义的docs进行向量化
-    for file_name, v in docs.items():
-        try:
-            v = [x if isinstance(x, Document) else Document(**x) for x in v]
-            kb_file = KnowledgeFile(filename=file_name, knowledge_base_name=knowledge_base_name)
-            await kb.update_doc(kb_file, docs=v, not_refresh_vs_cache=True)
-        except Exception as e:
-            msg = f"为 {file_name} 添加自定义docs时出错：{e}"
-            logger.error(f'{e.__class__.__name__}: {msg}',
-                         exc_info=e if log_verbose else None)
-            failed_files[file_name] = msg
+    # for file_name, v in docs.items():
+    #     try:
+    #         v = [x if isinstance(x, Document) else Document(**x) for x in v]
+    #         kb_file = KnowledgeFile(filename=file_name, knowledge_base_name=knowledge_base_name)
+    #         await kb.update_doc(kb_file, docs=v, not_refresh_vs_cache=True)
+    #     except Exception as e:
+    #         msg = f"为 {file_name} 添加自定义docs时出错：{e}"
+    #         logger.error(f'{e.__class__.__name__}: {msg}',
+    #                      exc_info=e if log_verbose else None)
+    #         failed_files[file_name] = msg
 
     if not not_refresh_vs_cache:
         kb.save_vector_store()
@@ -172,8 +171,7 @@ async def upload_docs(
         chunk_size: int = Form(CHUNK_SIZE, description="知识库中单段文本最大长度"),
         chunk_overlap: int = Form(OVERLAP_SIZE, description="知识库中相邻文本重合长度"),
         zh_title_enhance: bool = Form(ZH_TITLE_ENHANCE, description="是否开启中文标题加强"),
-        docs: Json = Form({}, description="自定义的docs，需要转为json字符串",
-                          examples=[{"test.txt": [Document(page_content="custom doc")]}]),
+        docs: str = Form("{}", description="自定义的docs，需要转为json字符串"),
         not_refresh_vs_cache: bool = Form(False, description="暂不保存向量库（用于FAISS）"),
 ) -> BaseResponse:
     """
@@ -187,7 +185,7 @@ async def upload_docs(
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")
 
     failed_files = {}
-    file_names = list(docs.keys())
+    file_names = list()
 
     # 先将上传的文件保存到磁盘
     for result in _save_files_in_thread(files, knowledge_base_name=knowledge_base_name, override=override):
@@ -227,6 +225,7 @@ async def delete_docs(
         return BaseResponse(code=403, msg="Don't attack me")
 
     knowledge_base_name = urllib.parse.unquote(knowledge_base_name)
+    print("知识库：",knowledge_base_name)
     kb = await KBServiceFactory.get_service_by_name(knowledge_base_name)
     if kb is None:
         return BaseResponse(code=404, msg=f"未找到知识库 {knowledge_base_name}")

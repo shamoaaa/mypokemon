@@ -109,10 +109,10 @@ class MilvusKBService(KBService):
             for k, v in doc.metadata.items():
                 doc.metadata[k] = str(v)
             # # 确保每个Milvus字段都存在于文档的元数据中，如果不存在则设置为空字符串
-            # for field in self.milvus.fields:
-            #     doc.metadata.setdefault(field, "")
-            # doc.metadata.pop(self.milvus._text_field, None)
-            # doc.metadata.pop(self.milvus._vector_field, None)
+            for field in self.milvus.fields:
+                doc.metadata.setdefault(field, "")
+            doc.metadata.pop(self.milvus._text_field, None)
+            doc.metadata.pop(self.milvus._vector_field, None)
         print("-----------------------------")
         print(docs)
         # 这里是 milvus 实例继承自 LangChain的 VectorStore 基类 中的 add_documents 方法

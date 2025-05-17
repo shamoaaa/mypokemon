@@ -95,6 +95,33 @@ services:
       retries: 3
     networks:
       - vector-net
+
+  neo4j:
+    container_name: neo4j
+    image: neo4j:5.15.0  # 与您本地版本一致
+    environment:
+      NEO4J_AUTH: neo4j/woshishamo630  # 替换为您想要的密码
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_apoc_import_file_use__neo4j__config: "true"
+      NEO4J_PLUGINS: '["apoc"]'  # 安装APOC插件
+    ports:
+      - "7474:7474"  # HTTP接口
+      - "7473:7473"  # HTTPS接口
+      - "7687:7687"  # Bolt协议
+    volumes:
+      - ./volumes/neo4j/data:/data  
+      - ./volumes/neo4j/logs:/logs
+      - ./volumes/neo4j/import:/var/lib/neo4j/import
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "your_strong_password", "RETURN 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - vector-net
+    restart: unless-stopped
+
   
 
 volumes:

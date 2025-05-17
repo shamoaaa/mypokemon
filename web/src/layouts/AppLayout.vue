@@ -55,7 +55,7 @@ console.log(route)
 
 const apiDocsUrl = computed(() => {
   // return `${import.meta.env.VITE_API_URL || `http://${window.location.hostname}:${window.location.port}`}/docs`
-  return `http://localhost:5050/docs`
+  return `http://localhost:9999/docs`
 })
 
 
@@ -66,12 +66,12 @@ const mainList = [{
     icon: MessageOutlined,
     activeIcon: MessageFilled,
   }, {
-    name: '图谱',
-    path: '/graph',
-    icon: ProjectOutlined,
-    activeIcon: ProjectFilled,
-    // hidden: !configStore.config.enable_knowledge_graph,
-  }, {
+  //   name: '图谱',
+  //   path: '/graph',
+  //   icon: ProjectOutlined,
+  //   activeIcon: ProjectFilled,
+  //   // hidden: !configStore.config.enable_knowledge_graph,
+  // }, {
     name: '知识库',
     path: '/database',
     icon: BookOutlined,

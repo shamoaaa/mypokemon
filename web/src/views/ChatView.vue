@@ -1,132 +1,272 @@
 <template>
   <div class="chat-container">
-<!--    左边是侧边栏（对话列表 conversations）-->
+    <!-- 左边侧边栏 -->
     <div class="conversations" :class="{ 'is-open': state.isSidebarOpen }">
       <div class="actions">
-        <!-- <div class="action new" @click="addNewConv"><FormOutlined /></div> -->
-            <div class="action new" @click="addNewConv" title="新建对话">
-      <!-- 使用 PlusCircleOutlined 比较直观 -->
-        <PlusCircleOutlined />
-            </div>
-         <span class="header-title">对话历史</span>
+        <div class="action new" @click="showNewConvModal" title="新建对话">
+          <PlusCircleOutlined />
+        </div>
+        <span class="header-title">对话历史</span>
         <div class="action close" @click="state.isSidebarOpen = false">
           <img src="@/assets/icons/sidebar_left.svg" class="iconfont icon-20" alt="设置" />
         </div>
       </div>
       <div class="conversation-list">
         <div class="conversation"
-          v-for="(state, index) in convs"
-          :key="index"
-          :class="{ active: curConvId === index }"
-          @click="goToConversation(index)">
-          <div class="conversation__title"><CommentOutlined /> &nbsp;{{ state.title }}</div>
-          <div class="conversation__delete" @click.stop="delConv(index)"><DeleteOutlined /></div>
+          v-for="(conv, index) in convStore.conversations"
+          :key="conv.id"  
+          :class="{ active: currentConvId === conv.id }"  
+          @click="goToConversation(conv.id)">
+          <div class="conversation__title">
+            <CommentOutlined /> &nbsp;{{ conv.name || '未命名会话' }}
+            <span class="conv-type-tag">{{ getChatTypeName(conv.chat_type) }}</span>
+          </div>
+          <div class="conversation__delete" @click.stop="confirmDelete(conv.id)">
+            <DeleteOutlined />
+          </div>
         </div>
       </div>
     </div>
-<!--    聊天组件（ChatComponent） 渲染右边聊天内容区域。  把当前选中的对话 (convs[curConvId]) 作为 prop 传给 ChatComponent,传递状态对象 state-->
+    
+    <!-- 右边聊天区域 -->
     <ChatComponent
-      :conv="convs[curConvId]"
+      v-if="currentConversation"
+      :conv="currentConversation"
       :state="state"
       @rename-title="renameTitle"
-      @newconv="addNewConv"/>
-<!--  重命名对话&新建对话-->
+      @newconv="showNewConvModal"/>
+
+    <!-- 新建会话模态框 -->
+    <a-modal
+      v-model:visible="showModal"
+      title="新建会话"
+      @ok="createNewConversation"
+      @cancel="closeModal"
+      :width="400"
+      okText="创建"
+      cancelText="取消"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="会话名称" required>
+          <a-input 
+            v-model:value="newConversation.name" 
+            placeholder="请输入会话名称"
+            :maxLength="30"
+            show-count
+          />
+        </a-form-item>
+        <a-form-item label="聊天类型" required>
+          <a-select v-model:value="newConversation.chatType">
+            <a-select-option value="chat">通用聊天</a-select-option>
+            <a-select-option value="knowledge_base_chat">基于知识库聊天</a-select-option>
+            <a-select-option value="search_engine_chat">基于联网搜索聊天</a-select-option>
+            <a-select-option value="neo4j_chat">基于知识图谱聊天</a-select-option>
+          </a-select>
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, watch, onMounted } from 'vue'
-
+import { reactive, ref, watch, onMounted, computed } from 'vue'
 import ChatComponent from '@/components/ChatComponent.vue'
 import { DeleteOutlined, CommentOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
-// 从 localStorage 里读取历史对话记录，如果没有就用一个初始默认对话。
-const convs = reactive(JSON.parse(localStorage.getItem('chat-convs')) || [
-  {
-    id: 0,
-    title: '新对话',
-    history: [],
-    messages: [],
-    inputText: ''
-  },
-])
+import { Modal, Form, Input, Select, message } from 'ant-design-vue'
+import { useUserStore, useConvStore } from '@/stores/config'
+import axios from 'axios';
+
+const AForm = Form
+const AFormItem = Form.Item
+const AInput = Input
+const ASelect = Select
+const ASelectOption = Select.Option
+
+const userStore = useUserStore()
+const convStore = useConvStore()
+
+const currentConvId = ref(null)
+const showModal = ref(false)
 
 const state = reactive({
-  isSidebarOpen: JSON.parse(localStorage.getItem('chat-sidebar-open') || 'true'),
+  isSidebarOpen: 'true',
 })
 
-// Watch isSidebarOpen and save to localStorage
+const newConversation = reactive({
+  name: '',
+  chatType: 'chat'
+})
+
+// 获取当前会话对象
+const currentConversation = computed(() => {
+  const result = convStore.conversations.find(c => c.id === currentConvId.value) // ✅
+  console.log("当前会话对象：", result)
+  return result || null
+})
+
+// 显示新建会话模态框
+const showNewConvModal = () => {
+  newConversation.name = ''
+  newConversation.chatType = 'chat'
+  showModal.value = true
+}
+
+// 创建新会话
+const createNewConversation = async () => {
+  if (!newConversation.name.trim()) {
+    message.error('请输入会话名称')
+    return
+  }
+
+  try {
+    const response = await axios.post('/api/conversations', {
+      user_id: userStore.user.id,
+      name: newConversation.name,
+      chat_type: newConversation.chatType
+    })
+    
+    if (response.data.status === 200) {
+      message.success('会话创建成功')
+      await convStore.fetchConversations(userStore.user.id)
+      currentConvId.value = response.data.id
+      closeModal()
+    }
+  } catch (error) {
+    message.error(error.response?.data?.message || '创建会话失败')
+  }
+}
+
+// 关闭模态框
+const closeModal = () => {
+  showModal.value = false
+}
+
+// 删除会话（带确认对话框）
+const confirmDelete = (convId) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: '确定要删除这个会话吗？所有聊天记录将丢失',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    maskClosable: true,
+    async onOk() {
+      await deleteConversation(convId)
+    },
+    onCancel() {
+      console.log('用户取消删除')
+    }
+  })
+}
+
+const deleteConversation = async (convId) => {
+  // 1. 获取当前会话状态
+  const isCurrentConv = convId === currentConvId.value
+  const oldConversations = [...convStore.conversations] // 备份用于回滚
+  
+  try {
+    // 2. 乐观更新 - 立即从本地移除
+    convStore.conversations = convStore.conversations.filter(c => c.id !== convId)
+    
+    // 3. 如果删除的是当前会话，自动选择第一个会话
+    if (isCurrentConv) {
+      currentConvId.value = convStore.conversations.length > 0 
+        ? convStore.conversations[0].id 
+        : null
+    }
+    
+    // 4. 调用后端API
+    const response = await axios.delete(`/api/conversations/${convId}`)
+    
+    // 5. 验证响应（根据您后端返回的格式调整）
+    if (response.data?.status !== 200) {
+      throw new Error(response.data?.message || '删除失败')
+    }
+    
+    message.success('删除成功')
+    
+  } catch (error) {
+    // 6. 失败回滚
+    convStore.conversations = oldConversations
+    
+    // 7. 错误处理
+    const errorMsg = error.response?.data?.message || 
+                    error.message || 
+                    '删除失败，请稍后重试'
+    
+    message.error(errorMsg)
+    console.error('删除会话错误:', error)
+    
+    // 8. 如果删除的是当前会话且回滚后存在，恢复选中状态
+    if (isCurrentConv && oldConversations.some(c => c.id === convId)) {
+      currentConvId.value = convId
+    }
+  }
+}
+
+// 切换会话
+const goToConversation = (convId) => {
+  currentConvId.value = convId
+}
+
+// 处理重命名标题
+const renameTitle = (newTitle) => {
+  if (!currentConvId.value) return
+  
+  const conv = convStore.conversations.find(c => c.id === currentConvId.value)
+  if (conv) {
+    conv.name = newTitle
+    // 可以添加API调用保存到后端
+  }
+}
+
+// 聊天类型名称映射
+const getChatTypeName = (type) => {
+  const map = {
+    chat: '(通用)',
+    knowledge_base_chat: '(知识库)',
+    search_engine_chat: '(联网)',
+    neo4j_chat: '(知识图谱)'
+  }
+  return map[type] || type
+}
+
+// 初始化
+onMounted(async () => {
+  if (userStore.isAuthenticated) {
+    // 如果store中没有会话数据，则加载
+    if (convStore.conversations.length === 0) {
+      await convStore.fetchConversations(userStore.user.id)
+      console.log('会话数据结构:', JSON.parse(JSON.stringify(convStore.conversations[0])))
+    }
+    
+    // 设置默认会话
+    if (!currentConvId.value && convStore.conversations.length > 0) {
+      currentConvId.value = convStore.conversations[0].id
+      console.log("当前会话id：", currentConvId)
+    }
+  }
+})
+
+// 监听登录状态变化
+watch(() => userStore.isAuthenticated, async (isAuth) => {
+  if (isAuth) {
+    await convStore.fetchConversations(userStore.user.id)
+    if (!currentConvId.value && convStore.conversations.length > 0) {
+      currentConvId.value = convStore.conversations[0].id
+    }
+  } else {
+    currentConvId.value = null
+  }
+})
+
+// 监视侧边栏状态变化
 watch(
   () => state.isSidebarOpen,
   (newValue) => {
     localStorage.setItem('chat-sidebar-open', JSON.stringify(newValue))
   }
 )
-const curConvId = ref(0)
-
-const generateRandomHash = (length) => {
-    let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let hash = '';
-    for (let i = 0; i < length; i++) {
-        hash += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return hash;
-}
-
-const renameTitle = (newTitle) => {
-  convs[curConvId.value].title = newTitle
-}
-
-const goToConversation = (index) => {
-  curConvId.value = index
-  console.log(convs[curConvId.value])
-}
-
-const addNewConv = () => {
-  curConvId.value = 0
-  if (convs.length > 0 && convs[0].messages.length === 0) {
-    return
-  }
-  convs.unshift({
-    id: generateRandomHash(8),
-    title: `新对话`,
-    history: [],
-    messages: [],
-    inputText: ''
-  })
-}
-
-const delConv = (index) => {
-  convs.splice(index, 1)
-
-  if (index < curConvId.value) {
-    curConvId.value -= 1
-  } else if (index === curConvId.value) {
-    curConvId.value = 0
-  }
-
-  if (convs.length === 0) {
-    addNewConv()
-  }
-}
-
-// Watch convs and save to localStorage
-watch(
-  () => convs,
-  (newStates) => {
-    localStorage.setItem('chat-convs', JSON.stringify(newStates))
-  },
-  { deep: true }
-)
-
-// Load convs from localStorage on mount
-onMounted(() => {
-  const savedSonvs = JSON.parse(localStorage.getItem('chat-convs'))
-  if (savedSonvs) {
-    for (let i = 0; i < savedSonvs.length; i++) {
-      convs[i] = savedSonvs[i]
-    }
-  }
-})
 </script>
 
 <style lang="less" scoped>

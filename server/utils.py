@@ -61,7 +61,19 @@ def get_ChatOpenAI(
         verbose: bool = True,
         **kwargs: Any,
 ) -> ChatOpenAI:
-    if model_name in LLM_MODELS:
+    if model_name == "deepseek-poke":
+        model = ChatOpenAI(
+            streaming=streaming,
+            verbose=verbose,
+            callbacks=callbacks,
+            openai_api_key=MODEL_API_KEY,
+            openai_api_base=OLLAMA_API_BASE,
+            model_name=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs
+        )
+    elif model_name in LLM_MODELS:
         model = ChatOpenAI(
             streaming=streaming,
             verbose=verbose,

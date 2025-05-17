@@ -147,7 +147,7 @@ async def knowledge_base_chat(query: str = Body(..., description="用户输入",
         if len(source_documents) == 0:  # 没有找到相关文档
             source_documents.append(f"<font color='red'>未检索到与问题相关的文档片段,由大模型直接进行回答</font>")
 
-
+        print("检索到的文档：", source_documents)
         if STREAM:
             async for token in callback.aiter():
                 # Use server-sent-events to stream the response

@@ -308,6 +308,7 @@ class KnowledgeFile:
                                                    chunk_overlap=chunk_overlap)
             if self.text_splitter_name == "MarkdownHeaderTextSplitter":
                 docs = text_splitter.split_text(docs[0].page_content)
+                print("docs---------:",docs)
             else:
                 docs = text_splitter.split_documents(docs)
 

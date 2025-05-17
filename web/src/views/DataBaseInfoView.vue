@@ -7,15 +7,11 @@
       <div class="database-info">
         <a-tag color="blue" v-if="database.embed_model">{{ database.embed_model }}</a-tag>
         <a-tag color="green" v-if="database.dimension">{{ database.dimension }}</a-tag>
-        <span class="row-count">{{ database.files ? Object.keys(database.files).length : 0 }} 文件 · {{ database.db_id }}</span>
       </div>
     </template>
     <template #actions>
       <a-button type="primary" @click="backToDatabase">
         <LeftOutlined /> 返回
-      </a-button>
-      <a-button type="primary" danger @click="deleteDatabse">
-        <DeleteOutlined /> 删除数据库
       </a-button>
     </template>
   </HeaderComponent>
@@ -24,57 +20,76 @@
     <a-tabs v-model:activeKey="state.curPage" class="atab-container" type="card">
 
       <a-tab-pane key="files">
-        <template #tab><span><ReadOutlined />文件列表</span></template>
-        <div class="db-tab-container">
-          <div class="actions">
-            <a-button @click="handleRefresh" :loading="state.refrashing">刷新</a-button>
-          </div>
-          <a-table :columns="columns" :data-source="Object.values(database.files || {})" row-key="file_id" class="my-table">
-            <template #bodyCell="{ column, text, record }">
-              <template v-if="column.key === 'filename'">
-                <a-button class="main-btn" type="link" @click="openFileDetail(record)">{{ text }}</a-button>
-              </template>
-              <template v-else-if="column.key === 'type'">
-                <span :class="['span-type', text]">{{ text?.toUpperCase() }}</span>
-              </template>
-              <template v-else-if="column.key === 'status' && text === 'done'">
-                <CheckCircleFilled style="color: #41A317;"/>
-              </template>
-              <template v-else-if="column.key === 'status' && text === 'failed'">
-                <CloseCircleFilled style="color: #FF4D4F ;"/>
-              </template>
-              <template v-else-if="column.key === 'status' && text === 'processing'">
-                <HourglassFilled style="color: #1677FF;"/>
-              </template>
-              <template v-else-if="column.key === 'status' && text === 'waiting'">
-                <ClockCircleFilled style="color: #FFCD43;"/>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a-button class="del-btn" type="link"
-                  @click="deleteFile(text)"
-                  :disabled="state.lock || record.status === 'processing' || record.status === 'waiting' "
-                  >删除
-                </a-button>
-              </template>
-              <span v-else-if="column.key === 'created_at'">{{ formatRelativeTime(Math.round(text*1000)) }}</span>
-              <span v-else>{{ text }}</span>
-            </template>
-          </a-table>
-          <a-drawer
-            width="50%"
-            v-model:open="state.drawer"
-            class="custom-class"
-            :title="selectedFile?.filename || '文件详情'"
-            placement="right"
-            @after-open-change="afterOpenChange"
+  <template #tab><span><ReadOutlined />文件列表</span></template>
+  <div class="db-tab-container">
+    <div class="actions">
+      <a-button @click="handleRefresh" :loading="state.refrashing">刷新</a-button>
+    </div>
+
+    <!-- 使用 fileList.value 作为数据源 -->
+    <a-table
+      :columns="columns"
+      :data-source="fileList"
+      row-key="id"
+      class="my-table"
+    >
+      <template #bodyCell="{ column, text, record }">
+        <template v-if="column.key === 'filename'">
+          <a-button class="main-btn" type="link" @click="openFileDetail(record)">
+            {{ text }}
+          </a-button>
+        </template>
+        <template v-else-if="column.key === 'type'">
+          <span :class="['span-type', text]">{{ text?.toUpperCase() }}</span>
+        </template>
+        <template v-else-if="column.key === 'status' && text === 'done'">
+          <CheckCircleFilled style="color: #41A317;" />
+        </template>
+        <template v-else-if="column.key === 'status' && text === 'failed'">
+          <CloseCircleFilled style="color: #FF4D4F;" />
+        </template>
+        <template v-else-if="column.key === 'status' && text === 'processing'">
+          <HourglassFilled style="color: #1677FF;" />
+        </template>
+        <template v-else-if="column.key === 'status' && text === 'waiting'">
+          <ClockCircleFilled style="color: #FFCD43;" />
+        </template>
+        <template v-else-if="column.key === 'action'">
+          <a-button
+            class="del-btn"
+            type="link"
+            @click="deleteFile(text)"
+            :disabled="state.lock || record.status === 'processing' || record.status === 'waiting'"
           >
-            <h2>共 {{ selectedFile?.lines?.length || 0 }} 个片段</h2>
-            <p v-for="line in selectedFile?.lines || []" :key="line.id" class="line-text">
-              {{ line.text }}
-            </p>
-          </a-drawer>
-        </div>
-      </a-tab-pane>
+            删除
+          </a-button>
+        </template>
+        <span v-else-if="column.key === 'created_at'">
+          {{ formatRelativeTime(new Date(text * 1000)) }}
+        </span>
+        <span v-else>{{ text }}</span>
+      </template>
+    </a-table>
+
+    <a-drawer
+      width="50%"
+      v-model:open="state.drawer"
+      class="custom-class"
+      :title="selectedFile?.file_name || '文件详情'"
+      placement="right"
+      @after-open-change="afterOpenChange"
+    >
+      <h2>共 {{ selectedFile?.docs_count || 0 }} 个片段</h2>
+      <p
+        v-for="line in selectedFile?.lines || []"
+        :key="line.id"
+        class="line-text"
+      >
+        {{ line.text }}
+      </p>
+    </a-drawer>
+  </div>
+</a-tab-pane>
 
       <a-tab-pane key="add">
         <template #tab><span><CloudUploadOutlined />添加文件</span></template>
@@ -111,29 +126,21 @@
                 <a-upload-dragger
                   class="upload-dragger"
                   v-model:fileList="fileList"
-                  name="file"
+                  name="files"
                   :multiple="true"
                   :disabled="state.loading"
-                  :action="'/api/data/upload?db_id=' + databaseId"
+                  :action="uploadActionUrl"
                   @change="handleFileUpload"
                   @drop="handleDrop"
+                  :beforeUpload="beforeUpload"
+                  :data="uploadDataFields" 
+                  :headers="uploadHeaders"
                 >
                   <p class="ant-upload-text">点击或者把文件拖拽到这里上传</p>
                   <p class="ant-upload-hint">
-                    目前仅支持上传文本文件，如 .pdf, .txt, .md。且同名文件无法重复添加
+                    目前仅支持上传文本文件，如 .pdf, .json, .md。且同名文件无法重复添加
                   </p>
                 </a-upload-dragger>
-              </div>
-              <div class="actions">
-                <a-button
-                  type="primary"
-                  @click="chunkFiles"
-                  :loading="state.loading"
-                  :disabled="fileList.length === 0"
-                  style="margin: 0px 20px 20px 0;"
-                >
-                  生成分块
-                </a-button>
               </div>
             </div>
           </div>
@@ -164,117 +171,7 @@
         </div>
       </a-tab-pane>
 
-      <a-tab-pane key="query-test" force-render>
-        <template #tab><span><SearchOutlined />检索测试</span></template>
-        <div class="query-test-container db-tab-container">
-          <div class="sider">
-            <div class="sider-top">
-              <div class="query-params" v-if="state.curPage == 'query-test'">
-                <!-- <h3 class="params-title">查询参数</h3> -->
-                <div class="params-group">
-                  <div class="params-item">
-                    <p>检索数量：</p>
-                    <a-input-number size="small" v-model:value="meta.maxQueryCount" :min="1" :max="20" />
-                  </div>
-                  <div class="params-item">
-                    <p>过滤低质量：</p>
-                    <a-switch v-model:checked="meta.filter" />
-                  </div>
-                  <div class="params-item">
-                    <p>筛选 TopK：</p>
-                    <a-input-number size="small" v-model:value="meta.topK" :min="1" :max="meta.maxQueryCount" />
-                  </div>
-                  <div class="params-item" v-if="configStore.config.enable_reranker">
-                    <p>排序方式：</p>
-                    <a-radio-group v-model:value="meta.sortBy" button-style="solid" size="small">
-                      <a-radio-button value="rerank_score">重排序分</a-radio-button>
-                      <a-radio-button value="distance">相似度</a-radio-button>
-                    </a-radio-group>
-                  </div>
-                </div>
-                <div class="params-group">
-                  <div class="params-item w100" v-if="configStore.config.enable_reranker">
-                    <p>重排序阈值：</p>
-                    <a-slider v-model:value="meta.rerankThreshold" :min="0" :max="1" :step="0.01" />
-                  </div>
-                  <div class="params-item w100">
-                    <p>距离阈值：</p>
-                    <a-slider v-model:value="meta.distanceThreshold" :min="0" :max="1" :step="0.01" />
-                  </div>
-                </div>
-                <div class="params-group">
-                  <div class="params-item col">
-                    <p>重写查询<small>（修改后需重新检索）</small>：</p>
-                    <a-segmented v-model:value="meta.use_rewrite_query" :options="use_rewrite_queryOptions">
-                      <template #label="{ payload }">
-                        <div>
-                          <p style="margin: 4px 0">{{ payload.subTitle }}</p>
-                        </div>
-                      </template>
-                    </a-segmented>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="sider-bottom">
-            </div>
-          </div>
-          <div class="query-result-container">
-            <div class="query-action">
-              <a-textarea
-                v-model:value="queryText"
-                placeholder="填写需要查询的句子"
-                :auto-size="{ minRows: 2, maxRows: 10 }"
-              />
-              <a-button class="btn-query" @click="onQuery" :disabled="queryText.length == 0">
-                <span v-if="!state.searchLoading"><SearchOutlined /> 检索</span>
-                <span v-else><LoadingOutlined /></span>
-              </a-button>
-            </div>
 
-            <!-- 新增示例按钮 -->
-            <!-- <div class="query-examples-container">
-              <div class="examples-title">示例查询：</div>
-              <div class="query-examples">
-                <a-button v-for="example in queryExamples" :key="example" @click="useQueryExample(example)">
-                  {{ example }}
-                </a-button>
-              </div>
-            </div> -->
-            <div class="query-test" v-if="queryResult">
-              <div class="results-overview">
-                <div class="results-stats">
-                  <span class="stat-item">
-                    <strong>总数:</strong> {{ queryResult.all_results.length }}
-                  </span>
-                  <span class="stat-item">
-                    <strong>过滤后:</strong> {{ filteredResults.length }}
-                  </span>
-                  <span class="stat-item">
-                    <strong>TopK:</strong> {{ meta.topK }}
-                  </span>
-                  <span class="stat-item">
-                    <strong>排序:</strong> {{ meta.sortBy === 'rerank_score' ? '重排序分' : '相似度' }}
-                  </span>
-                </div>
-                <div class="rewritten-query" v-if="queryResult.rw_query">
-                  <strong>重写后查询:</strong>
-                  <span class="query-text">{{ queryResult.rw_query }}</span>
-                </div>
-              </div>
-              <div class="query-result-card" v-for="(result, idx) in (filteredResults)" :key="idx">
-                <p>
-                  <strong>#{{ idx + 1 }}&nbsp;&nbsp;&nbsp;</strong>
-                  <span>{{ result.file.filename }}&nbsp;&nbsp;&nbsp;</span>
-                  <span><strong>相似度</strong>：{{ result.distance.toFixed(4) }}&nbsp;&nbsp;&nbsp;</span>
-                  <span v-if="result.rerank_score"><strong>重排序分</strong>：{{ result.rerank_score.toFixed(4) }}</span>
-                </p>
-                <p class="query-text">{{ result.entity.text }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </a-tab-pane>
       <!-- <a-tab-pane key="3" tab="Tab 3">Content of Tab Pane 3</a-tab-pane> -->
     </a-tabs>
   </div>
@@ -285,7 +182,7 @@
 import { onMounted, reactive, ref, watch, toRaw, onUnmounted, computed } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useConfigStore } from '@/stores/config'
+import { useConfigStore,useUserStore } from '@/stores/config'
 import HeaderComponent from '@/components/HeaderComponent.vue';
 import {
   ReadOutlined,
@@ -300,11 +197,20 @@ import {
   LoadingOutlined,
   CaretUpOutlined
 } from '@ant-design/icons-vue'
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
 
+dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
 
+const formatRelativeTime = (date) => {
+  return dayjs(date).fromNow();
+};
+
+const userStore = useUserStore();
 const route = useRoute();
 const router = useRouter();
-const databaseId = ref(route.params.database_id);
 const database = ref({});
 
 const fileList = ref([]);
@@ -316,285 +222,138 @@ const queryResult = ref(null)
 const filteredResults = ref([])
 const configStore = useConfigStore()
 
+const knowledgeBases = ref([]);
 const state = reactive({
   loading: false,
-  adding: false,
-  refrashing: false,
-  searchLoading: false,
-  lock: false,
-  drawer: false,
-  refreshInterval: null,
-  curPage: "files",
 });
 
-const meta = reactive({
-  mode: 'search',
-  maxQueryCount: 30,
-  filter: true,
-  use_rewrite_query: 'off',
-  rerankThreshold: 0.1,
-  distanceThreshold: 0.3,
-  topK: 10,
-  sortBy: 'rerank_score',
+const selectedKbName = ref(route.params.knowledge_base_name || '');
+
+watch(() => route.params.knowledge_base_name, (newName) => {
+  if(newName){
+    selectedKbName.value = newName;
+    getKnowledgeBaseList();
+  } else {
+    console.warn('知识库名称为空或未定义');
+  }
 });
-
-const use_rewrite_queryOptions = ref([
-  { value: 'off', payload: { title: 'off', subTitle: '不启用' } },
-  { value: 'on', payload: { title: 'on', subTitle: '启用重写' } },
-  { value: 'hyde', payload: { title: 'hyde', subTitle: '伪文档生成' } },
-])
-
-const filterQueryResults = () => {
-  if (!queryResult.value || !queryResult.value.all_results) {
-    return;
-  }
-
-  let results = toRaw(queryResult.value.all_results);
-  console.log("results", results);
-
-  if (meta.filter) {
-    results = results.filter(r => r.distance >= meta.distanceThreshold);
-    console.log("before", results);
-
-    // 根据排序方式决定排序逻辑
-    if (configStore.config.enable_reranker) {
-      // 先过滤掉低于阈值的结果
-      results = results.filter(r => r.rerank_score >= meta.rerankThreshold);
-
-      // 根据选择的排序方式进行排序
-      if (meta.sortBy === 'rerank_score') {
-        results = results.sort((a, b) => b.rerank_score - a.rerank_score);
-      } else {
-        // 按距离排序 (数值越大表示越相似)
-        results = results.sort((a, b) => b.distance - a.distance);
-      }
-    } else {
-      // 没有启用重排序时，默认按距离排序
-      results = results.sort((a, b) => b.distance - a.distance);
-    }
-
-    console.log("after", results);
-
-    results = results.slice(0, meta.topK);
-  }
-
-  filteredResults.value = results;
-}
-
-const onQuery = () => {
-  if (database.value.embed_model != configStore.config.embed_model) {
-    message.error('向量模型不匹配，请重新选择')
-    return
-  }
-
-  console.log(queryText.value)
-  state.searchLoading = true
-  if (!queryText.value.trim()) {
-    message.error('请输入查询内容')
-    state.searchLoading = false
-    return
-  }
-  meta.db_id = database.value.db_id
-  fetch('/api/data/query-test', {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"  // 添加 Content-Type 头
-    },
-    body: JSON.stringify({
-      query: queryText.value.trim(),
-      meta: meta
-    }),
-  })
-  .then(response => response.json())
-  .then(data => {
-    console.log(data)
-    queryResult.value = data
-    filterQueryResults()
-  })
-  .catch(error => {
-    console.error(error)
-    message.error(error.message)
-  })
-  .finally(() => {
-    state.searchLoading = false
-  })
-}
-
-const handleFileUpload = (event) => {
-  console.log(event)
-  console.log(fileList.value)
-}
-
-const handleDrop = (event) => {
-  console.log(event)
-  console.log(fileList.value)
-}
-
-const afterOpenChange = (visible) => {
-  if (!visible) {
-    selectedFile.value = null
-  }
-}
 
 const backToDatabase = () => {
   router.push('/database')
 }
 
-const handleRefresh = () => {
-  state.refrashing = true
-  getDatabaseInfo().then(() => {
-    state.refrashing = false
-    console.log(database.value)
-  })
-}
+const handleRefresh = async () => {
+  if (state.refrashing) return; // 防止重复点击
 
-const deleteDatabse = () => {
+  state.refrashing = true;
 
-  Modal.confirm({
-    title: '删除数据库',
-    content: '确定要删除该数据库吗？',
-    okText: '确认',
-    cancelText: '取消',
-    onOk: () => {
-      state.lock = true
-      fetch(`/api/data/?db_id=${databaseId.value}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          db_id: databaseId.value
-        }),
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log(data)
-        message.success(data.message)
-        router.push('/database')
-      })
-      .catch(error => {
-        console.error(error)
-        message.error(error.message)
-      })
-      .finally(() => {
-        state.lock = false
-      })
-    },
-    onCancel: () => {
-      console.log('Cancel');
-    },
-  });
-}
-
-const openFileDetail = (record) => {
-  state.lock = true
-  fetch(`/api/data/document?db_id=${databaseId.value}&file_id=${record.file_id}`, {
-    method: "GET",
-  })
-    .then(response => response.json())
-    .then(data => {
-      console.log(data)
-      if (data.status == "failed") {
-        message.error(data.message)
-        return
-      }
-      state.lock = false
-      selectedFile.value = {
-        ...record,
-        lines: data.lines || []
-      }
-      state.drawer = true
-    })
-    .catch(error => {
-      console.error(error)
-      message.error(error.message)
-    })
-}
-
-const formatRelativeTime = (timestamp) => {
-    const now = Date.now();
-    const secondsPast = (now - timestamp) / 1000;
-    if (secondsPast < 60) {
-        return Math.round(secondsPast) + ' 秒前';
-    } else if (secondsPast < 3600) {
-        return Math.round(secondsPast / 60) + ' 分钟前';
-    } else if (secondsPast < 86400) {
-        return Math.round(secondsPast / 3600) + ' 小时前';
-    } else {
-        const date = new Date(timestamp);
-        const year = date.getFullYear();
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
-        return `${year} 年 ${month} 月 ${day} 日`;
-    }
-}
-
-
-const getDatabaseInfo = () => {
-  const db_id = databaseId.value
-  if (!db_id) {
-    return
+  try {
+    await getKnowledgeBaseList(); // 假设这是你获取知识库列表的方法
+    message.success('刷新成功');
+  } catch (error) {
+    console.error('刷新失败:', error);
+    message.error('刷新失败，请重试');
+  } finally {
+    state.refrashing = false;
   }
-  state.lock = true
-  return new Promise((resolve, reject) => {
-    fetch(`/api/data/info?db_id=${db_id}`, {
-      method: "GET",
-    })
-      .then(response => response.json())
-      .then(data => {
-        database.value = data
-        resolve(data)
-      })
-      .catch(error => {
-        console.error(error)
-        message.error(error.message)
-        reject(error)
-      })
-      .finally(() => {
-        state.lock = false
-      })
-  })
-}
+};
 
-const deleteFile = (fileId) => {
-  console.log(fileId)
-  //删除提示
+const handleFileUpload = async (info) => {
+  const { status, name, response } = info.file;
+
+  if (status === 'uploading') {
+    state.value.loading = true;
+    return;
+  }
+
+  if (status === 'done') {
+    message.success(`${name} 上传成功`);
+    getKnowledgeBaseList(); // 刷新文件列表
+  } else if (status === 'error') {
+    message.error(`${name} 上传失败`);
+  }
+
+  if (info.fileList && info.fileList.length > 0) {
+    // 只保留最新上传成功的文件（可选）
+    fileList.value = info.fileList.filter(file => file.status !== 'done');
+  }
+
+  state.value.loading = false;
+};
+
+const beforeUpload = (file) => {
+// 检查数据库名称是否为"wiki"
+  if (selectedKbName.value === 'wiki') {
+    Modal.warning({
+      title: '无法上传',
+      content: '通用知识库，你上传nm呢？',
+      okText: '我知道了'
+    });
+    return Upload.LIST_IGNORE;
+  }
+  const isValidType = /\.(pdf|json|md)$/i.test(file.name);
+  if (!isValidType) {
+    message.error(`文件 ${file.name} 类型不支持`);
+    return Upload.LIST_IGNORE; // 不加入上传队列
+  }
+  return isValidType || Upload.LIST_IGNORE;
+};
+
+const handleDrop = (e) => {
+  console.log('Drop event:', e);
+};
+
+
+// 计算属性：根据当前 db_id 构造上传地址
+const uploadActionUrl = computed(() => {
+  return `/api/knowledge_base/upload_files`;
+});
+
+// 表单数据字段（POST Form Data）
+const uploadDataFields = computed(() => ({
+  knowledge_base_name: selectedKbName.value
+}));
+
+
+const deleteFile = (file) => {
+  if (selectedKbName.value === 'wiki') {
+    Modal.warning({
+      title: '无法删除',
+      content: '通用知识库，你删nm呢？',
+      okText: '我知道了'
+    });
+    return;
+  }
   Modal.confirm({
     title: '删除文件',
-    content: '确定要删除该文件吗？',
-    okText: '确认',
-    cancelText: '取消',
-    onOk: () => {
-        state.lock = true
-        fetch('/api/data/document', {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json"  // 添加 Content-Type 头
-          },
+    content: `确定要删除文件 "${file.file_name}" 吗？`,
+    onOk: async () => {
+      state.lock = true;
+      try {
+        const response = await fetch('/api/knowledge_base/delete_files', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            db_id: databaseId.value,
-            file_id: fileId
-          }),
-        })
-          .then(response => response.json())
-          .then(data => {
-            console.log(data)
-            message.success(data.message)
-            getDatabaseInfo()
+            knowledge_base_name: selectedKbName.value,
+            file_names: [file.file_name]
           })
-          .catch(error => {
-            console.error(error)
-              message.error(error.message)
-            })
-            .finally(() => {
-              state.lock = false
-            })
-    },
-    onCancel: () => {
-      console.log('Cancel');
-    },
+        });
+
+        const result = await response.json();
+        if (result.code === 200) {
+          message.success('删除成功');
+          getKnowledgeBaseList(); // 刷新文件列表
+        } else {
+          message.error(result.msg || '删除失败');
+        }
+      } catch (error) {
+        message.error('网络错误，请重试');
+      } finally {
+        state.lock = false;
+      }
+    }
   });
-}
+};
 
 const chunkParams = ref({
   chunk_size: 1000,
@@ -605,148 +364,112 @@ const chunkParams = ref({
 const chunkResults = ref([]);
 const activeFileKeys = ref([]);
 
-// 获取所有分块的总数
-const getTotalChunks = () => {
-  return chunkResults.value.reduce((total, file) => total + file.nodes.length, 0);
-}
 
-// 分块预览
-const chunkFiles = () => {
-  console.log(fileList.value)
-  const files = fileList.value.filter(file => file.status === 'done').map(file => file.response.file_path)
-  console.log(files)
 
-  if (files.length === 0) {
-    message.error('请先上传文件')
-    return
+const getKnowledgeBaseList = async () => {
+  const userId = userStore.user?.id;
+  const kbName = selectedKbName.value;
+  console.log("kbname:", kbName); // 注意这里应该是 kbName 而不是 selectedKbName
+
+  if (!userId) {
+    message.warning('请先登录');
+    return;
   }
 
-  state.loading = true
-
-  // 调用file-to-chunk接口获取分块信息
-  fetch('/api/data/file-to-chunk', {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      files: files,
-      params: chunkParams.value
-    }),
-  })
-  .then(response => response.json())
-  .then(data => {
-    console.log('文件分块信息:', data)
-    chunkResults.value = Object.values(data);
-    activeFileKeys.value = chunkResults.value.length > 0 ? [0] : []; // 默认展开第一个文件
-  })
-  .catch(error => {
-    console.error(error)
-    message.error(error.message)
-  })
-  .finally(() => {
-    state.loading = false
-  })
-}
-
-// 添加到数据库
-const addToDatabase = () => {
-  if (chunkResults.value.length === 0) {
-    message.error('没有可添加的分块')
-    return
+  if (!kbName) {
+    message.warning('未指定知识库名称');
+    return;
   }
 
-  state.adding = true
-  state.lock = true
+  try {
+    state.loading = true;
 
-  // 转换为API需要的格式
-  const fileChunks = {};
-  chunkResults.value.forEach(file => {
-    fileChunks[file.file_id] = file;
-  });
+    const queryParams = new URLSearchParams({
+      user_id: userId,
+      knowledge_base_name: kbName
+    });
 
-  // 调用add-by-chunks接口将分块添加到数据库
-  fetch('/api/data/add-by-chunks', {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      db_id: databaseId.value,
-      file_chunks: fileChunks
-    }),
-  })
-  .then(response => response.json())
-  .then(data => {
-    console.log(data)
+    const response = await fetch(`/api/knowledge_base/list_files?${queryParams.toString()}`, {
+      method: 'GET'
+      // 移除了不必要的 Content-Type header
+    });
 
-    if (data.status === 'failed') {
-      message.error(data.message)
-    } else {
-      message.success(data.message)
-      fileList.value = []
-      chunkResults.value = []
-      activeFileKeys.value = []
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  })
-  .catch(error => {
-    console.error(error)
-    message.error(error.message)
-  })
-  .finally(() => {
-    getDatabaseInfo()
-    state.adding = false
-    state.lock = false
-  })
-}
 
-const addDocumentByFile = () => {
-  // 此函数不再需要，由chunkFiles和addToDatabase替代
-  console.log('此功能已被拆分为两个步骤')
-}
+    const result = await response.json();
 
-const columns = [
-  // { title: '文件ID', dataIndex: 'file_id', key: 'file_id' },
-  { title: '文件名', dataIndex: 'filename', key: 'filename' },
-  { title: '上传时间', dataIndex: 'created_at', key: 'created_at' },
-  { title: '状态', dataIndex: 'status', key: 'status' },
-  { title: '类型', dataIndex: 'type', key: 'type' },
-  { title: '操作', key: 'action', dataIndex: 'file_id' }
-];
+    console.log("文件信息：", result);
 
-watch(() => route.params.database_id, (newId) => {
-    databaseId.value = newId;
-    console.log(newId)
-    clearInterval(state.refreshInterval)
-    getDatabaseInfo()
+    // 直接检查 data 字段
+    fileList.value = result.data || [];
+    if (result.data && result.data.length > 0) {
+      console.log("文件列表已更新");
+    } else {
+      message.info('没有找到任何文件');
+    }
+  } catch (error) {
+    console.error('获取文件列表时发生异常:', error);
+    message.error('网络错误，请检查连接后重试');
+  } finally {
+    state.loading = false;
   }
-);
-
-// 检测到 meta 变化时重新查询
-watch(() => meta, () => {
-  filterQueryResults()
-}, { deep: true })
-
-// 添加更多示例查询
-const queryExamples = ref([
-  '贾宝玉的丫鬟有哪些？',
-  '请介绍一下红楼梦的主要人物',
-  '林黛玉是什么性格？',
-  '曹雪芹的创作背景',
-]);
-
-// 使用示例查询的方法
-const useQueryExample = (example) => {
-  queryText.value = example;
-  onQuery();
 };
 
+const columns = [
+  {
+    title: 'ID',
+    dataIndex: 'id',
+    key: 'id'
+  },
+  {
+    title: '文件名',
+    dataIndex: 'file_name',
+    key: 'file_name'
+  },
+  {
+    title: '扩展名',
+    dataIndex: 'file_ext',
+    key: 'file_ext'
+  },
+  {
+    title: '大小',
+    dataIndex: 'file_size',
+    key: 'file_size',
+    customRender: ({ text }) => `${(text / 1024).toFixed(1)} KB`
+  },
+  {
+    title: '文档数',
+    dataIndex: 'docs_count',
+    key: 'docs_count'
+  },
+  {
+    title: '创建时间',
+    dataIndex: 'create_time',
+    key: 'create_time',
+    customRender: ({ text }) => formatRelativeTime(new Date(text))
+  },
+  {
+    title: '操作',
+    key: 'action',
+    scopedSlots: { customRender: 'action' }
+  }
+];
+
+
+
+
 onMounted(() => {
-  getDatabaseInfo();
-  state.refreshInterval = setInterval(() => {
-    getDatabaseInfo();
-  }, 10000);
-})
+  console.log('组件挂载，开始检查登录状态...');
+  console.log('isAuthenticated:', userStore.isAuthenticated);
+  if (!userStore.isAuthenticated) {
+    message.warning('请先登录');
+    router.push('/login'); // 跳转到登录页
+  } else {
+    getKnowledgeBaseList();
+  }
+});
 
 // 添加 onUnmounted 钩子，在组件卸载时清除定时器
 onUnmounted(() => {
@@ -755,9 +478,6 @@ onUnmounted(() => {
     state.refreshInterval = null;
   }
 })
-
-
-
 </script>
 
 <style lang="less" scoped>

@@ -11,3 +11,11 @@ API_SERVER = {
     "host": DEFAULT_BIND_HOST,
     "port": 9999,
 }
+
+# Neo4j 服务器配置
+NEO4J_SERVER = {
+    "url": "neo4j://localhost:7687",  # Neo4j连接地址
+    "username": "neo4j",              # 用户名
+    "password": "woshishamo630",      # 密码
+    "database": "neo4j",             # 数据库名（可选）
+}

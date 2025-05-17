@@ -155,14 +155,14 @@ async def search_engine_chat(query: str = Body(..., description="用户输入", 
         if STREAM:
             async for token in callback.aiter():
                 # Use server-sent-events to stream the response
-                yield json.dumps({"text": token}, ensure_ascii=False)
+                yield json.dumps({"text": token,"message_id": message_id}, ensure_ascii=False)
             yield json.dumps({"docs": retriever_documents}, ensure_ascii=False)
             yield json.dumps({"search": search_documents}, ensure_ascii=False)
         else:
             answer = ""
             async for token in callback.aiter():
                 answer += token
-            yield json.dumps({"text": answer, "docs": retriever_documents, "search": search_documents},
+            yield json.dumps({"text": answer, "message_id": message_id, "docs": retriever_documents, "search": search_documents},
                              ensure_ascii=False)
         await task
 

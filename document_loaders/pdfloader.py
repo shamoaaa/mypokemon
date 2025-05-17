@@ -1,5 +1,16 @@
 from document_loaders.interface import Pipeline
+import sys
+from importlib.util import find_spec
 from unstructured.partition.pdf import partition_pdf
+if find_spec("pdfminer") is not None:
+    # 临时修补pdfminer
+    import pdfminer.utils
+    if not hasattr(pdfminer.utils, 'open_filename'):
+        def open_filename(*args, **kwargs):
+            from pdfminer.utils import FileOrName
+            return FileOrName(*args, **kwargs)
+        pdfminer.utils.open_filename = open_filename
+        sys.modules['pdfminer.utils'] = pdfminer.utils
 from unstructured.partition.image import partition_image
 from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import CharacterTextSplitter

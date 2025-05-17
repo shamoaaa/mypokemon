@@ -116,7 +116,7 @@ async def wiki_init():
                         kb_info="wiki公共数据信息",
                         vs_type="milvus",
                         embed_model="bge-m3-pro",
-                        user_id="aa4eb528-9bab-4978-bc67-8ec2473476a6")
+                        user_id="bb98f024-6caf-4e67-a143-c16b827b24e5")
     from langchain.schema import Document
     file_path = "F:/bigmodel/mypokemon/knowledge_base/wiki/content/pokemon.jsonl"
     # 创建一个空的 Document 列表

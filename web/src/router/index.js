@@ -80,7 +80,7 @@ const router = createRouter({
           meta: { keepAlive: true }
         },
         {
-          path: ':database_id',
+          path: ':knowledge_base_name',
           name: 'DatabaseInfoComp',
           component: () => import('../views/DataBaseInfoView.vue'),
           meta: { keepAlive: false }
@@ -136,5 +136,19 @@ const router = createRouter({
     },
   ]
 })
+
+
+router.beforeEach((to, from, next) => {
+  if (to.meta.requiresAuth) {
+    const user = localStorage.getItem('user');
+    if (!user) {
+      next('/');
+    } else {
+      next();
+    }
+  } else {
+    next();
+  }
+});
 
 export default router

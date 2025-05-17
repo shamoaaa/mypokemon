@@ -32,12 +32,17 @@ def create_app(run_mode: str = None):
     mount_app_routes(app)
 
     # 挂载 Vue 构建的前端静态文件夹
-    app.mount("/", StaticFiles(directory="web"), name="static")
+    app.mount("/", StaticFiles(directory="web/dist", html=True), name="static")
+    @app.get("/{path:path}")
+    async def catch_all(path: str):
+        return FileResponse("web/dist/index.html")
+    
     return app
 
 
 from server.chat.knowledge_base_chat import knowledge_base_chat
 from server.chat.search_engine_chat import search_engine_chat
+from server.chat.neo4j_chat import neo4j_chat
 from server.utils import BaseResponse
 
 
@@ -61,6 +66,11 @@ def mount_app_routes(app: FastAPI):
              tags=["Chat"],
              summary="与搜索引擎对话",
              )(search_engine_chat)
+    
+    app.post("/api/chat/neo4j_chat",
+             tags=["Chat"],
+             summary="基于知识图谱的问答",
+             )(neo4j_chat)
 
 
     # 用户管理模块相关接口
@@ -86,6 +96,7 @@ def mount_app_routes(app: FastAPI):
         ConversationResponse, MessageResponse, delete_conversation_and_messages,
         update_conversation_name
     )
+    from server.db.repository.message_repository import update_message_feedback
 
     # 新建会话接口
     app.post("/api/conversations",
@@ -120,6 +131,13 @@ def mount_app_routes(app: FastAPI):
             tags=["Messages"],
             summary="获取指定会话的消息列表",
             )(get_conversation_messages)
+    
+    # 更新消息接口
+    app.put("/api/messages/{message_id}/update_message",
+            # response_model=List[MessageResponse],  # 使用正确的响应模型
+            tags=["Messages"],
+            summary="更新指定的消息",
+            )(update_message_feedback)
 
     from server.db.repository.utils import list_running_models
 
@@ -191,7 +209,7 @@ def run_api(host, port, **kwargs):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="192.168.110.131")
+    parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--ssl_keyfile", type=str)
     parser.add_argument("--ssl_certfile", type=str)

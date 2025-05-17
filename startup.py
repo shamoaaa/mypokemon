@@ -4,15 +4,14 @@ import asyncio
 from typing import List, Dict
 from configs.basic_config import LOG_FORMAT, LOG_PATH
 from configs.model_config import LLM_MODELS
-from configs.server_config import (API_SERVER, DEFAULT_BIND_HOST)
+from configs.server_config import (API_SERVER, DEFAULT_BIND_HOST, NEO4J_SERVER)
 
 # 构建多进程
 import multiprocessing as mp
 from multiprocessing import Process
 import argparse
 from fastapi import FastAPI
-
-
+import logging
 
 
 def run_api_server(run_mode: str = None):

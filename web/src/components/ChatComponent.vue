@@ -1,8 +1,7 @@
 <template>
-  <div class="chat"  ref="chatContainer">
-<!--     顶部左侧是打开侧边栏、新建会话、切换模型，右侧是打开选项设置面板。>-->
+  <div class="chat" ref="chatContainer">
+    <!-- 聊天头部 -->
     <div class="chat-header">
-<!--      聊天界面顶部导航栏（新建对话、切换模型、选项面板）-->
       <div class="header__left">
         <div
           v-if="!state.isSidebarOpen"
@@ -11,684 +10,683 @@
         >
           <img src="@/assets/icons/sidebar_left.svg" class="iconfont icon-20" alt="设置" />
         </div>
-
-         <div class="action-button" @click="$emit('newconv')">
-        <PlusCircleOutlined class="icon" />
-        <span class="text">新建会话</span>
-      </div>
-
-
-      </div>
-      <div class="header__right">
-         <a-dropdown>
-  <div class="model-select" @click.prevent>
-    <BulbOutlined class="icon" />
-    <span class="text">{{ configStore.config?.model_provider }}/{{ configStore.config?.model_name }}</span>
-  </div>
-  <template #overlay>
-    <a-menu class="scrollable-menu">
-      <a-menu-item-group
-        v-for="(item, key) in modelKeys"
-        :key="key"
-        :title="modelNames[item]?.name"
-      >
-        <a-menu-item
-          v-for="(model, idx) in modelNames[item]?.models"
-          :key="`${item}-${idx}`"
-          @click="selectModel(item, model)"
-        >
-          {{ item }}/{{ model }}
-        </a-menu-item>
-      </a-menu-item-group>
-      <a-menu-item-group v-if="customModels.length > 0" title="自定义模型">
-        <a-menu-item
-          v-for="(model, idx) in customModels"
-          :key="`custom-${idx}`"
-          @click="selectModel('custom', model.custom_id)"
-        >
-          custom/{{ model.custom_id }}
-        </a-menu-item>
-      </a-menu-item-group>
-    </a-menu>
-  </template>
-</a-dropdown>
-        <div class="nav-btn text" @click="opts.showPanel = !opts.showPanel">
-          <component :is="opts.showPanel ? FolderOpenOutlined : FolderOutlined" /> <span class="text">选项</span>
+        <div class="conv-title" v-if="editingTitle">
+          <a-input
+            ref="titleInput"
+            v-model:value="tempTitle"
+            @pressEnter="saveTitle"
+            @blur="saveTitle"
+            size="small"
+            class="title-input"
+          />
         </div>
-        <div v-if="opts.showPanel" class="my-panal r0 top100 swing-in-top-fwd" ref="panel">
-          <div class="flex-center" @click="meta.stream = !meta.stream">
-            流式输出 <div @click.stop><a-switch v-model:checked="meta.stream" /></div>
-          </div>
-          <div class="flex-center" @click="meta.summary_title = !meta.summary_title">
-            总结对话标题 <div @click.stop><a-switch v-model:checked="meta.summary_title" /></div>
-          </div>
-          <div class="flex-center">
-            最大历史轮数 <a-input-number id="inputNumber" v-model:value="meta.history_round" :min="1" :max="50" />
-          </div>
-          <div class="flex-center">
-            字体大小
-            <a-select v-model:value="meta.fontSize" style="width: 100px" placeholder="选择字体大小">
-              <a-select-option value="smaller">更小</a-select-option>
-              <a-select-option value="default">默认</a-select-option>
-              <a-select-option value="larger">更大</a-select-option>
-            </a-select>
-          </div>
-          <div class="flex-center" @click="meta.wideScreen = !meta.wideScreen">
-            宽屏模式 <div @click.stop><a-switch v-model:checked="meta.wideScreen" /></div>
-          </div>
-
+        <div class="conv-title" v-else @click="startEditingTitle">
+          {{ conv.name || '未命名会话' }}
         </div>
       </div>
-    </div>
-<div v-if="conv.messages.length == 0" class="chat-examples">
-  <h1>你好，我是可萌，一个基于宝可梦知识图谱的智能助手</h1>
-  <div class="example-cards">
-    <div
-      class="card"
-      v-for="(exp, key) in examples"
-      :key="key"
-      @click="conv.inputText = exp"
-    >
-      <div class="blob"></div>
-      <div class="bg">
-        <span style="z-index: 3">{{ exp }}</span>
-      </div>
-    </div>
-  </div>
-</div>
-    <div class="chat-box" :class="{ 'wide-screen': meta.wideScreen, 'font-smaller': meta.fontSize === 'smaller', 'font-larger': meta.fontSize === 'larger' }">
-      <MessageComponent
-        v-for="message in conv.messages"
-        :message="message"
-        :key="message.id"
-        :is-processing="isStreaming"
-        :show-refs="true"
-        @retry="retryMessage(message.id)"
-        @retryStoppedMessage="retryStoppedMessage(message.id)"
-      >
-      </MessageComponent>
-    </div>
-    <div class="bottom">
-      <div class="message-input-wrapper"  :class="{ 'wide-screen': meta.wideScreen}">
-        <MessageInputComponent
-          v-model="conv.inputText"
-          :is-loading="isStreaming"
-          :send-button-disabled="!conv.inputText && !isStreaming"
-          :auto-size="{ minRows: 2, maxRows: 10 }"
-          @send="handleSendOrStop"
-          @keydown="handleKeyDown"
-        >
-          <template #options-left>
-            <div
-              :class="{'switch': true, 'opt-item': true, 'active': meta.use_web}"
-              v-if="configStore.config.enable_web_search"
-              @click="meta.use_web=!meta.use_web"
-            >
-              <CompassOutlined style="margin-right: 3px;"/>
-              联网搜索
-            </div>
-            <div
-              :class="{'switch': true, 'opt-item': true, 'active': meta.use_graph}"
-              v-if="configStore.config.enable_knowledge_graph"
-              @click="meta.use_graph=!meta.use_graph"
-            >
-              <DeploymentUnitOutlined style="margin-right: 3px;"/>
-              知识图谱
-            </div>
-            <a-dropdown
-              v-if="configStore.config.enable_knowledge_base && opts.databases.length > 0"
-              :class="{'opt-item': true, 'active': meta.selectedKB !== null}"
-            >
-              <a class="ant-dropdown-link" @click.prevent>
-                <BookOutlined style="margin-right: 3px;"/>
-                <span class="text">{{ meta.selectedKB === null ? '不使用知识库' : opts.databases[meta.selectedKB]?.name }}</span>
-              </a>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item v-for="(db, index) in opts.databases" :key="index" @click="useDatabase(index)">
-                    <a href="javascript:;">{{ db.name }}</a>
-                  </a-menu-item>
-                  <a-menu-item @click="useDatabase(null)">
-                    <a href="javascript:;">不使用</a>
-                  </a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
+      <div class="header__right metas">
+        <!-- 知识库选择下拉菜单 -->
+        <a-dropdown v-model:visible="kbDropdownVisible" :trigger="['click']" v-if="availableKnowledgeBases.length > 0">
+          <div class="model-select" @click.prevent>
+            <span class="text">{{ selectedKnowledgeBase || '选择知识库' }}</span>
+            <DownOutlined class="icon" />
+          </div>
+          <template #overlay>
+            <a-menu class="scrollable-menu">
+              <a-menu-item v-for="kb in availableKnowledgeBases" :key="kb.kb_name" @click="selectKnowledgeBase(kb.kb_name)">
+                {{ kb.kb_name }}
+              </a-menu-item>
+              <a-menu-item @click="selectKnowledgeBase('')">
+                不使用知识库
+              </a-menu-item>
+            </a-menu>
           </template>
-        </MessageInputComponent>
-        <p class="note">请注意辨别内容的可靠性 By {{ configStore.config?.model_provider }}: {{ configStore.config?.model_name }}</p>
+        </a-dropdown>
+        <!-- 模型选择下拉菜单 -->
+        <a-dropdown v-model:visible="modelDropdownVisible" :trigger="['click']">
+          <div class="model-select" @click.prevent>
+            <span class="text">{{ selectedModel }}</span>
+            <DownOutlined class="icon" />
+          </div>
+          <template #overlay>
+            <a-menu class="scrollable-menu">
+              <a-menu-item v-for="model in availableModels" :key="model" @click="selectModel(model)">
+                {{ model }}
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
+      </div>
+    </div>
+
+    <!-- 聊天内容区域 -->
+    <div class="chat-box" ref="chatBox" :class="{ 'wide-screen': isWideScreen }">
+      <div v-if="messages.length === 0" class="chat-examples">
+        <h1>欢迎使用可萌助手</h1>
+        <div class="example-cards">
+          <div 
+            class="card" 
+            v-for="(example, index) in examples" 
+            :key="index" 
+            @click="sendMessage(example)"
+          >
+            <div class="blob"></div>
+            <div class="bg">
+              <span>{{ example }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-else>
+        <div 
+          v-for="(message, index) in messages" 
+          :key="index" 
+          class="message-box" 
+          :class="message.role"
+        >
+          <div class="message-content">
+            <div class="message-avatar">
+              <UserOutlined v-if="message.role === 'user'" />
+              <img src="@/assets/icons/ai.jpg" class="iconfont icon-20" alt="ai_png" v-else />
+            </div>
+            <div class="message-text">
+              <MarkdownViewer :content="message.content" />
+
+              <!-- 相关文档片段 -->
+              <div v-if="message.docs && message.docs.length > 0" class="document-section">
+                <h4>相关文档:</h4>
+                <div v-for="(doc, index) in message.docs" :key="index" class="doc-item">
+                  <MarkdownViewer :content="doc"></MarkdownViewer>
+                </div>
+              </div>
+
+              <!-- 联网搜索结果 -->
+              <div v-if="message.search && message.search.length > 0" class="search-section">
+                <h4>实时联网检索:</h4>
+                <ul class="search-list">
+                  <li v-for="(item, index) in message.search" :key="index" class="search-item">
+                    <MarkdownViewer :content="item" />
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Cypher 查询 -->
+              <div v-if="message.cypherQuery" class="cypher-section">
+                <h4>生成的Cypher查询:</h4>
+                <div v-for="(item, index) in message.cypherQuery" :key="index" class="cypher-item">
+                  <pre class="cypher-code"><MarkdownViewer :content="item" /></pre>
+                </div>
+              </div>
+
+              <!-- Cypher查询结果 -->
+              <div v-if="message.cypherResult && message.cypherResult.length > 0" class="cypher-result-section">
+                <h4>Cypher查询结果:</h4>
+                <ul class="cypher-result-list">
+                  <li v-for="(result, index) in message.cypherResult" :key="index" class="cypher-result-item">
+                    <MarkdownViewer :content="JSON.stringify(result, null, 2)" />
+                  </li>
+                </ul>
+              </div>
+
+              <!-- 评分反馈 -->
+              <div v-if="message.role === 'assistant' && message.showFeedback" class="feedback-section">
+                <div class="feedback-buttons">
+                  <span class="feedback-label">这个回答有帮助吗？</span>
+                  <a-button 
+                    v-for="score in [1, 2, 3, 4, 5]" 
+                    :key="score"
+                    :type="message.feedbackScore === score ? 'primary' : 'default'"
+                    size="small"
+                    @click="showFeedbackModal(message.id)"
+                  >
+                    {{ score }}星
+                  </a-button>
+                </div>
+                <div v-if="message.feedbackScore" class="feedback-result">
+                  已评价: {{ message.feedbackScore }}星
+                  <span v-if="message.feedbackReason"> - {{ message.feedbackReason }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 评分模态框 -->
+    <a-modal
+      v-model:visible="feedbackModalVisible"
+      title="评价回答质量"
+      @ok="submitFeedback"
+      @cancel="feedbackModalVisible = false"
+      class="feedback-modal"
+    >
+      <div class="modal-content">
+        <div class="rating-section">
+          <span>请评分:</span>
+          <a-rate v-model:value="feedbackScore" />
+        </div>
+        <div class="reason-section">
+          <span>评价理由(可选):</span>
+          <a-textarea
+            v-model:value="feedbackReason"
+            placeholder="这个回答哪里好或需要改进？"
+            :auto-size="{ minRows: 2, maxRows: 4 }"
+          />
+        </div>
+      </div>
+    </a-modal>
+
+    <!-- 输入区域 -->
+    <div class="bottom">
+      <div class="message-input-wrapper" :class="{ 'wide-screen': isWideScreen }">
+        <div class="input-box">
+          <a-textarea
+            v-model:value="userInput"
+            placeholder="输入消息..."
+            :auto-size="{ minRows: 1, maxRows: 6 }"
+            @pressEnter="handleSend"
+            allow-clear
+            ref="inputArea"
+            class="message-input"
+          />
+          <div class="input-actions">
+            <a-button 
+              type="primary" 
+              :loading="loading" 
+              @click="handleSend" 
+              :disabled="!userInput.trim()"
+              class="send-button"
+            >
+              发送
+            </a-button>
+          </div>
+        </div>
+        <p class="note">Shift+Enter 换行，Enter 发送</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, toRefs, nextTick, onUnmounted, watch, computed } from 'vue'
-import {
-
-  BookOutlined,
-  CompassOutlined,
-  PlusCircleOutlined,
-  FolderOutlined,
-  FolderOpenOutlined,
-  BulbOutlined,
-  DeploymentUnitOutlined,
-
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { 
+  MenuOutlined, 
+  PlusOutlined, 
+  DownOutlined, 
+  UserOutlined, 
+  RobotOutlined,
+  SendOutlined 
 } from '@ant-design/icons-vue'
-import { onClickOutside } from '@vueuse/core'
-import { useConfigStore } from '@/stores/config'
+import { useUserStore } from '@/stores/config' // 导入userStore
 import { message } from 'ant-design-vue'
-import MessageInputComponent from '@/components/MessageInputComponent.vue'
-import MessageComponent from '@/components/MessageComponent.vue'
+import axios from 'axios'
+import MarkdownViewer from '@/components/MarkdownViewer.vue'
 
 const props = defineProps({
-  conv: Object,
-  state: Object
+  conv: {
+    type: Object,
+    required: true
+  },
+  state: {
+    type: Object,
+    required: true
+  }
 })
 
-const emit = defineEmits(['rename-title', 'newconv']);
-const configStore = useConfigStore()
+const emit = defineEmits(['rename-title', 'newconv', 'toggle-sidebar'])
 
-const { conv, state } = toRefs(props)
-const chatContainer = ref(null)
+// 数据状态
+const userInput = ref('')
+const messages = ref([])
+const loading = ref(false)
+const editingTitle = ref(false)
+const tempTitle = ref('')
+const availableModels = ref([])
+const selectedModel = ref('')
+const modelDropdownVisible = ref(false)
 
-const isStreaming = ref(false)
-const userIsScrolling = ref(false);
-const shouldAutoScroll = ref(true);
+// 评分相关状态
+const feedbackModalVisible = ref(false);
+const currentRatingMessageId = ref('');
+const feedbackScore = ref(0);
+const feedbackReason = ref('');
 
-const panel = ref(null)
-const modelCard = ref(null)
-const examples = ref([
-  '喜欢小智吗？',
-  '今天常州天气怎么样？',
-  '介绍一下皮卡丘',
-  '今天星期几？'
-])
+// 新增知识库相关状态
+const availableKnowledgeBases = ref([])
+const selectedKnowledgeBase = ref('')
+const kbDropdownVisible = ref(false)
 
-const opts = reactive({
-  showPanel: false,
-  showModelCard: false,
-  openDetail: false,
-  databases: [],
-})
+// 获取userStore
+const userStore = useUserStore()
 
-const meta = reactive(JSON.parse(localStorage.getItem('meta')) || {
-  use_graph: false,
-  use_web: false,
-  graph_name: "neo4j",
-  selectedKB: null,
-  stream: true,
-  summary_title: false,
-  history_round: 20,
-  db_id: null,
-  fontSize: 'default',
-  wideScreen: false,
-  themeMode: false    // 控制亮/暗色模式
-})
+// DOM 引用
+const chatBox = ref(null)
+const inputArea = ref(null)
+const titleInput = ref(null)
+
+// 示例问题
+const examples = [
+  '皮卡丘的技能是什么？',
+  '赤红有哪些宝可梦？',
+  '介绍一下小智。',
+  '小火龙多少级进化？'
+]
 
 
-const consoleMsg = (msg) => console.log(msg)
-onClickOutside(panel, () => setTimeout(() => opts.showPanel = false, 30))
-onClickOutside(modelCard, () => setTimeout(() => opts.showModelCard = false, 30))
 
-// 从 message 中获取 history 信息，每个消息都是 {role, content} 的格式
-const getHistory = () => {
-  const history = conv.value.messages.map((msg) => {
-    if (msg.content) {
-      return {
-        role: msg.role === 'sent' ? 'user' : 'assistant',
-        content: msg.content
-      }
-    }
-  }).reduce((acc, cur) => {
-    if (cur) {
-      acc.push(cur)
-    }
-    return acc
-  }, [])
-  return history.slice(-meta.history_round)
-}
-
-const useDatabase = (index) => {
-  const selected = opts.databases[index]
-  console.log(selected)
-  if (index != null && configStore.config.embed_model != selected.embed_model) {
-    console.log(selected.embed_model, configStore.config.embed_model)
-    message.error(`所选知识库的向量模型（${selected.embed_model}）与当前向量模型（${configStore.config.embed_model}) 不匹配，请重新选择`)
-  } else {
-    meta.selectedKB = index
-  }
-}
-
-const handleKeyDown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    sendMessage()
-  } else if (e.key === 'Enter' && e.shiftKey) {
-    // Insert a newline character at the current cursor position
-    const textarea = e.target;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    conv.value.inputText.value =
-      conv.value.inputText.value.substring(0, start) +
-      '\n' +
-      conv.value.inputText.value.substring(end);
-    nextTick(() => {
-      textarea.setSelectionRange(start + 1, start + 1);
-    });
-  }
-}
-
-const renameTitle = () => {
-  if (meta.summary_title) {
-    const prompt = '请用一个很短的句子关于下面的对话内容的主题起一个名字，不要带标点符号：'
-    const firstUserMessage = conv.value.messages[0].content
-    const firstAiMessage = conv.value.messages[1].content
-    const context = `${prompt}\n\n问题: ${firstUserMessage}\n\n回复: ${firstAiMessage}，主题是（一句话）：`
-    simpleCall(context).then((data) => {
-      const response = data.response.split("：")[0].replace(/^["'"']/g, '').replace(/["'"']$/g, '')
-      emit('rename-title', response)
-    })
-  } else {
-    emit('rename-title', conv.value.messages[0].content)
-  }
-}
-
-const handleUserScroll = () => {
-  // 计算我们是否接近底部（100像素以内）
-  const isNearBottom = chatContainer.value.scrollHeight - chatContainer.value.scrollTop - chatContainer.value.clientHeight < 20;
-
-  // 如果用户不在底部，则仅将其标记为用户滚动
-  userIsScrolling.value = !isNearBottom;
-
-  // 如果用户再次滚动到底部，请恢复自动滚动
-  shouldAutoScroll.value = isNearBottom;
-};
-
-const scrollToBottom = () => {
-  if (shouldAutoScroll.value) {
-    setTimeout(() => {
-      chatContainer.value.scrollTop = chatContainer.value.scrollHeight - chatContainer.value.clientHeight;
-    }, 10);
-  }
-}
-
-const generateRandomHash = (length) => {
-    let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let hash = '';
-    for (let i = 0; i < length; i++) {
-        hash += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return hash;
-}
-
-const appendUserMessage = (msg) => {
-  conv.value.messages.push({
-    id: generateRandomHash(16),
-    role: 'sent',
-    content: msg
-  })
+// 初始化
+onMounted(async () => {
+  await fetchAvailableModels()
+  await fetchAvailableKnowledgeBases() // 新增：获取知识库列表
+  loadMessages()
   scrollToBottom()
-}
+  
+  // 如果有会话但没消息，自动聚焦输入框
+  if (props.conv.id && messages.value.length === 0) {
+    inputArea.value?.focus()
+  }
+})
 
-const appendAiMessage = (content, refs=null) => {
-  conv.value.messages.push({
-    id: generateRandomHash(16),
-    role: 'received',
-    content: content,
-    reasoning_content: '',
-    refs,
-    status: "init",
-    meta: {},
-    showThinking: "show"
-  })
-  scrollToBottom()
-}
 
-const updateMessage = (info) => {
-  const msg = conv.value.messages.find((msg) => msg.id === info.id);
-  if (msg) {
-    try {
-      // 只有在 text 不为空时更新
-      if (info.content !== null && info.content !== undefined && info.content !== '') {
-        msg.content += info.content;
-      }
-
-      if (info.reasoning_content !== null && info.reasoning_content !== undefined && info.reasoning_content !== '') {
-        msg.reasoning_content = info.reasoning_content;
-      }
-
-      // 只有在 refs 不为空时更新
-      if (info.refs !== null && info.refs !== undefined) {
-        msg.refs = info.refs;
-      }
-
-      if (info.model_name !== null && info.model_name !== undefined && info.model_name !== '') {
-        msg.model_name = info.model_name;
-      }
-
-      // 只有在 status 不为空时更新
-      if (info.status !== null && info.status !== undefined && info.status !== '') {
-        msg.status = info.status;
-      }
-
-      if (info.meta !== null && info.meta !== undefined) {
-        msg.meta = info.meta;
-      }
-
-      if (info.message !== null && info.message !== undefined) {
-        msg.message = info.message;
-      }
-
-      if (info.showThinking !== null && info.showThinking !== undefined) {
-        msg.showThinking = info.showThinking;
-      }
-
-      scrollToBottom();
-    } catch (error) {
-      console.error('Error updating message:', error);
-      msg.status = 'error';
-      msg.content = '消息更新失败';
+// 新增：获取可用的知识库列表
+const fetchAvailableKnowledgeBases = async () => {
+  try {
+    // 从userStore获取用户ID
+    const userId = userStore.user.id
+    if (!userId) {
+      console.error('用户ID不存在')
+      return
     }
-  } else {
-    console.error('Message not found:', info.id);
+    
+    const response = await axios.get(`/api/knowledge-bases/${userId}`)
+    if (response.data.status === 200) {
+      availableKnowledgeBases.value = response.data.data.knowledge_bases
+    }
+  } catch (error) {
+    console.error('获取知识库列表失败:', error)
+    message.error('获取知识库列表失败')
+  }
+}
+
+// 新增：选择知识库
+const selectKnowledgeBase = (kbName) => {
+  selectedKnowledgeBase.value = kbName
+  kbDropdownVisible.value = false
+}
+
+// 显示评分模态框
+const showFeedbackModal = (messageId) => {
+  const message = messages.value.find(m => m.id === messageId);
+  if (message) {
+    currentRatingMessageId.value = messageId;
+    feedbackScore.value = message.feedbackScore || 0;
+    feedbackReason.value = message.feedbackReason || '';
+    feedbackModalVisible.value = true;
   }
 };
 
-
-const groupRefs = (id) => {
-  const msg = conv.value.messages.find((msg) => msg.id === id)
-  if (msg.refs && msg.refs.knowledge_base.results.length > 0) {
-    msg.groupedResults = msg.refs.knowledge_base.results
-    .filter(result => result.file && result.file.filename)
-    .reduce((acc, result) => {
-      const { filename } = result.file;
-      if (!acc[filename]) {
-        acc[filename] = []
+// 提交评分
+const submitFeedback = async () => {
+  try {
+    const response = await axios.put(
+      `/api/messages/${currentRatingMessageId.value}/update_message`,
+      {
+        feedback_score: feedbackScore.value,
+        feedback_reason: feedbackReason.value
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
       }
-      acc[filename].push(result)
-      return acc;
-    }, {})
-  }
-  scrollToBottom()
-}
+    );
 
-const simpleCall = (msg) => {
-  return new Promise((resolve, reject) => {
-    fetch('/api/chat/call', {
-      method: 'POST',
-      body: JSON.stringify({ query: msg, }),
-      headers: { 'Content-Type': 'application/json' }
-    })
-    .then((response) => response.json())
-    .then((data) => resolve(data))
-    .catch((error) => reject(error))
-  })
-}
-
-const loadDatabases = () => {
-  fetch('/api/data/', { method: "GET", })
-    .then(response => response.json())
-    .then(data => {
-      console.log(data)
-      opts.databases = data.databases
-    })
-}
-
-// 新函数用于处理 fetch 请求
-const fetchChatResponse = (user_input, cur_res_id) => {
-  const controller = new AbortController();
-  const signal = controller.signal;
-
-  const params = {
-    query: user_input,
-    history: getHistory().slice(0, -1), // 去掉最后一条刚添加的用户消息,
-    meta: meta,
-    cur_res_id: cur_res_id,
-  }
-  console.log(params)
-
-  fetch('/api/chat/', {
-    method: 'POST',
-    body: JSON.stringify(params),
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    signal // 添加 signal 用于中断请求
-  })
-  .then((response) => {
-    if (!response.body) throw new Error("ReadableStream not supported.");
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = '';
-
-    const readChunk = () => {
-      return reader.read().then(({ done, value }) => {
-        if (done) {
-          const msg = conv.value.messages.find((msg) => msg.id === cur_res_id)
-          console.log(msg)
-          groupRefs(cur_res_id);
-          updateMessage({showThinking: "no", id: cur_res_id});
-          isStreaming.value = false;
-          if (conv.value.messages.length === 2) { renameTitle(); }
-          return;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-
-        // 处理除最后一行外的所有完整行
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i].trim();
-          if (line) {
-            try {
-              const data = JSON.parse(line);
-              updateMessage({
-                id: cur_res_id,
-                content: data.response,
-                reasoning_content: data.reasoning_content,
-                status: data.status,
-                meta: data.meta,
-                ...data,
-              });
-              // console.log("Last message", conv.value.messages[conv.value.messages.length - 1].content)
-              // console.log("Last message", conv.value.messages[conv.value.messages.length - 1].status)
-
-              if (data.history) {
-                conv.value.history = data.history;
-              }
-            } catch (e) {
-              console.error('JSON 解析错误:', e, line);
-            }
-          }
-        }
-
-        // 保留最后一个可能不完整的行
-        buffer = lines[lines.length - 1];
-
-        return readChunk(); // 继续读取
-      });
-    };
-    readChunk();
-  })
-  .catch((error) => {
-    if (error.name === 'AbortError') {
-      console.log('Fetch aborted');
-    } else {
-      console.error(error);
-      updateMessage({
-        id: cur_res_id,
-        status: "error",
-      });
+    if (response.data.status === 200) {
+      message.success('评价提交成功');
+      // 更新本地状态
+      const index = messages.value.findIndex(
+        m => m.id === currentRatingMessageId.value
+      );
+      if (index !== -1) {
+        messages.value[index].feedbackScore = feedbackScore.value;
+        messages.value[index].feedbackReason = feedbackReason.value;
+      }
     }
-    isStreaming.value = false;
-  });
+  } catch (error) {
+    console.error('提交评价失败:', error);
+    message.error(error.response?.data?.detail || '评价提交失败');
+  } finally {
+    feedbackModalVisible.value = false;
+  }
+};
 
-  // 监听 isStreaming 变化，当为 false 时中断请求
-  watch(isStreaming, (newValue) => {
-    if (!newValue) {
-      controller.abort();
+// 获取可用的模型列表
+const fetchAvailableModels = async () => {
+  try {
+    const response = await axios.get('/api/llm_model/list_running_models')
+    if (response.data.status === 200) {
+      availableModels.value = response.data.data.models
+      if (availableModels.value.length > 0) {
+        selectedModel.value = availableModels.value[0]
+      }
     }
-  });
+  } catch (error) {
+    console.error('获取模型列表失败:', error)
+    message.error('获取模型列表失败')
+  }
 }
 
+// 选择模型
+const selectModel = (model) => {
+  selectedModel.value = model
+  modelDropdownVisible.value = false
+}
 
-// 更新后的 sendMessage 函数
-const sendMessage = () => {
-  const user_input = conv.value.inputText.trim();
-  const dbID = opts.databases.length > 0 ? opts.databases[meta.selectedKB]?.db_id : null;
-  if (isStreaming.value) {
-    message.error('请等待上一条消息处理完成');
+// 加载消息历史
+const loadMessages = async () => {
+  if (!props.conv?.id) {
+    messages.value = []
     return
   }
-  if (user_input) {
-    isStreaming.value = true;
-    appendUserMessage(user_input);
-    appendAiMessage("", null);
-    forceScrollToBottom();
 
-    const cur_res_id = conv.value.messages[conv.value.messages.length - 1].id;
-    conv.value.inputText = '';
-    meta.db_id = dbID;
-    fetchChatResponse(user_input, cur_res_id)
-  } else {
-    console.log('请输入消息');
+  try {
+    const response = await axios.get(`/api/conversations/${props.conv.id}/messages`);
+    console.log('获取到的消息:', response.data); // 新增：打印获取到的消息
+
+    if (response.data.status === 200) {
+      // 格式化数据以适应前端需求
+      const formattedMessages = [];
+      response.data.data.forEach(msg => {
+        if (msg.query) { // 用户的消息
+          console.log('用户的消息:', msg.query); // 新增：打印用户的消息
+          formattedMessages.push({
+            role: 'user',
+            content: msg.query,
+            id: `${msg.id}-user`
+          });
+        }
+        if (msg.response) { // AI 的回复
+          console.log('AI的回复:', msg.response); // 新增：打印AI的回复
+          formattedMessages.push({
+            role: 'assistant',
+            content: msg.response,
+            id: `${msg.id}-assistant`
+          });
+        }
+      });
+
+      messages.value = formattedMessages;
+      console.log('更新后的消息列表:', messages.value);
+      scrollToBottom();
+    } else {
+      message.error('无法加载历史消息');
+    }
+  } catch (error) {
+    console.error('加载消息失败:', error);
+    message.error('加载历史消息失败');
   }
 }
 
-const retryMessage = (id) => {
-  // 找到 id 对应的 message，然后删除包含 message 在内以及后面所有的 message
-  const index = conv.value.messages.findIndex(msg => msg.id === id);
-  const pastMessage = conv.value.messages[index-1]
-  console.log("retryMessage", id, pastMessage)
-  conv.value.inputText = pastMessage.content
-  if (index !== -1) {
-    conv.value.messages = conv.value.messages.slice(0, index-1);
+// 发送消息
+const handleSend = async () => {
+  if (!userInput.value.trim() || loading.value) return;
+
+  const query = userInput.value.trim();
+  userInput.value = '';
+
+
+  // 检查知识库聊天是否选择了知识库
+  if (props.conv?.chat_type === 'knowledge_base_chat' && !selectedKnowledgeBase.value) {
+    // 使用Ant Design的message组件弹出提示
+    message.warning('请先选择知识库', 2); // 2秒后自动关闭
+    return; // 直接返回，不继续发送消息
   }
-  console.log(conv.value.messages)
-  sendMessage();
-}
 
-// 从本地存储加载数据
-onMounted(() => {
-  scrollToBottom()
-  loadDatabases()
+  // 添加用户消息（临时ID，会被后端替换）
+  const userMsg = {
+    role: 'user',
+    content: query,
+    id: `temp-${Date.now()}` // 临时ID，实际使用后端返回的ID
+  };
+  messages.value = [...messages.value, userMsg];
 
-  chatContainer.value.addEventListener('scroll', handleUserScroll);
+  // 添加AI消息占位（临时ID）
+  const aiMsg = {
+    role: 'assistant',
+    content: '...',
+    id: `temp-ai-${Date.now()}`, // 临时ID
+    showFeedback: false, // 初始不显示评分
+    feedbackScore: 0,
+    feedbackReason: ''
+  };
+  messages.value = [...messages.value, aiMsg];
 
-  // 检查现有消息中是否有内容为空的情况
-  if (conv.value.messages && conv.value.messages.length > 0) {
-    conv.value.messages.forEach(msg => {
-      if (msg.role === 'received' && (!msg.content || msg.content.trim() === '')) {
-        msg.status = 'error';
-        msg.message = '内容加载失败';
+  scrollToBottom();
+  loading.value = true;
+
+  try {
+    // 根据对话类型选择API端点
+    let apiEndpoint = '/api/chat'; // 默认普通聊天
+    if (props.conv?.chat_type) {
+      switch (props.conv.chat_type) {
+        case 'knowledge_base_chat':
+          apiEndpoint = '/api/chat/knowledge_base_chat';
+          break;
+        case 'search_engine_chat':
+          apiEndpoint = '/api/chat/search_engine_chat';
+          break;
+        case 'neo4j_chat':
+          apiEndpoint = '/api/chat/neo4j_chat';
+          break;
+        // 可以添加更多聊天类型
       }
+    }
+
+    // 构造请求体（根据不同类型可能需要不同参数）
+    const requestBody = {
+      query,
+      conversation_id: props.conv?.id || '',
+      model_name: selectedModel.value
+    };
+
+
+    // 如果是知识库聊天，添加知识库名称
+    if (props.conv?.chat_type === 'knowledge_base_chat' && selectedKnowledgeBase.value) {
+      requestBody.knowledge_base_name = selectedKnowledgeBase.value;
+    }
+
+
+    const response = await fetch(apiEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
     });
+
+    if (!response.ok) throw new Error(`HTTP错误: ${response.status}`);
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('无法读取响应流');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+    let backendMessageId = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        
+        const dataStr = line.replace('data: ', '').trim();
+        if (dataStr === '[DONE]') continue;
+
+        try {
+          const data = JSON.parse(dataStr);
+          console.log("后端传递过来的message：",data);
+          if (data.message_id) {
+            // 获取后端生成的真实message_id
+            backendMessageId = data.message_id;
+            
+            // 更新消息ID（找到最后一个assistant消息）
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant' && m.id.startsWith('temp-ai-')
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].id = backendMessageId;
+              messages.value[lastAiMsgIndex].showFeedback = true; // 显示评分
+            }
+          }
+          
+          if (data.text) {
+            fullText += data.text;
+            // 更新内容
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant'
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].content = fullText;
+            }
+            scrollToBottom();
+          }else if (data.docs) { // 处理文档片段
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant'
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].docs = data.docs;
+            }
+          }else if (data.search) { // 处理联网搜索结果
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant'
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].search = data.search;
+            }
+          }else if (data.generated_cypher) {
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant'
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].cypherQuery = [data.generated_cypher]
+            }
+          }else if (data.cypher_result) {
+            const lastAiMsgIndex = messages.value.findLastIndex(
+              m => m.role === 'assistant'
+            );
+            if (lastAiMsgIndex !== -1) {
+              messages.value[lastAiMsgIndex].cypherResult = [data.cypher_result]
+            }
+          }
+        } catch (e) {
+          console.warn('解析错误:', e, '原始数据:', dataStr);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('请求失败:', error);
+    const lastAiMsgIndex = messages.value.findLastIndex(
+      m => m.role === 'assistant'
+    );
+    if (lastAiMsgIndex !== -1) {
+      messages.value[lastAiMsgIndex].content = `错误: ${error.message || '未知错误'}`;
+      messages.value[lastAiMsgIndex].showFeedback = true; // 错误也允许评分
+    }
+  } finally {
+    loading.value = false;
+    scrollToBottom();
+    inputArea.value?.focus();
   }
-
-  console.log(conv.value.messages)
-
-  // 从本地存储加载数据
-  const storedMeta = localStorage.getItem('meta');
-  if (storedMeta) {
-    const parsedMeta = JSON.parse(storedMeta);
-    Object.assign(meta, parsedMeta);
-  }
-});
-
-onUnmounted(() => {
-  if (chatContainer.value) {
-    chatContainer.value.removeEventListener('scroll', handleUserScroll);
-  }
-});
-
-// 添加新函数来处理特定的滚动行为
-const forceScrollToBottom = () => {
-  shouldAutoScroll.value = true;
-  setTimeout(() => {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight - chatContainer.value.clientHeight;
-  }, 10);
 };
 
-// 监听 meta 对象的变化，并保存到本地存储
-watch(
-  () => meta,
-  (newMeta) => {
-    localStorage.setItem('meta', JSON.stringify(newMeta));
-  },
-  { deep: true }
-);
-watch(
-  () => meta.themeMode,
-  (isDark) => {
-    if (isDark) {
-      document.body.classList.add('dark-theme');
+// 发送示例消息
+const sendMessage = (text) => {
+  userInput.value = text
+  nextTick(() => {
+    handleSend()
+  })
+}
+
+// 滚动到底部
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (chatBox.value) {
+      chatBox.value.scrollTop = chatBox.value.scrollHeight
+    }
+  })
+}
+
+// 标题编辑
+const startEditingTitle = () => {
+  tempTitle.value = props.conv.name || ''
+  editingTitle.value = true
+  nextTick(() => {
+    titleInput.value?.focus()
+  })
+}
+
+const saveTitle = async () => {
+  if (!tempTitle.value.trim() || !props.conv.id || !editingTitle.value) {
+    // 如果没有修改或没有会话ID，直接退出编辑状态
+    editingTitle.value = false;
+    return;
+  }
+
+  const newName = tempTitle.value.trim();
+
+  try {
+    // 发送 PUT 请求更新会话名称
+    const response = await axios.put(`/api/conversations/${props.conv.id}/update_name`, {
+      name: newName
+    });
+
+    if (response.data.status === 200) {
+      // 成功更新后通知父组件刷新会话列表
+      emit('rename-title', newName);
+
+      // 可选：提示用户更新成功
+      message.success('会话名称已更新');
     } else {
-      document.body.classList.remove('dark-theme');
+      throw new Error('更新失败');
     }
+  } catch (error) {
+    console.error('更新会话名称失败:', error);
+    message.error('更新会话名称失败，请重试');
+  } finally {
+    editingTitle.value = false; // 关闭编辑状态
   }
-);
-// 处理发送或停止
-const handleSendOrStop = () => {
-  if (isStreaming.value) {
-    // 停止生成
-    isStreaming.value = false;
-    const lastMessage = conv.value.messages[conv.value.messages.length - 1];
-    if (lastMessage) {
-      lastMessage.isStoppedByUser = true;
-      lastMessage.status = 'stopped';
-    }
-  } else {
-    // 发送消息
-    sendMessage();
+};
+
+watch(() => props.conv, async (newVal) => {
+  if (newVal && newVal.id) {
+    await loadMessages()
+    scrollToBottom()
   }
-}
+}, { deep: true })
 
-// 重试被停止的消息
-const retryStoppedMessage = (id) => {
-  // 找到用户的原始问题
-  const messageIndex = conv.value.messages.findIndex(msg => msg.id === id);
-  if (messageIndex > 0) {
-    const userMessage = conv.value.messages[messageIndex - 1];
-    if (userMessage && userMessage.role === 'sent') {
-      conv.value.inputText = userMessage.content;
-      // 删除被停止的消息，以及所有后面的消息
-      conv.value.messages = conv.value.messages.slice(0, messageIndex-1);
-      // sendMessage();
-    }
-  }
-}
-
-const modelNames = computed(() => configStore.config?.model_names)
-const modelStatus = computed(() => configStore.config?.model_provider_status)
-const customModels = computed(() => configStore.config?.custom_models || [])
-
-// 筛选 modelStatus 中为真的key
-const modelKeys = computed(() => {
-  return Object.keys(modelStatus.value || {}).filter(key => modelStatus.value?.[key])
+// 计算属性
+const isWideScreen = computed(() => {
+  return window.innerWidth > 1200
 })
-
-// 选择模型的方法
-const selectModel = (provider, name) => {
-  configStore.setConfigValue('model_provider', provider)
-  configStore.setConfigValue('model_name', name)
-  message.success(`已切换到模型: ${provider}/${name}`)
-}
 </script>
 
 <style lang="less" scoped>
+
 .chat {
   position: relative;
   width: 100%;
-  max-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--main-light-7);
-  position: relative;
   box-sizing: border-box;
-  flex: 5 5 200px;
-  overflow-y: scroll;
 
   .chat-header {
     user-select: none;
@@ -701,255 +699,213 @@ const selectModel = (provider, name) => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem;
+    padding: 0 1.5rem;
+    border-bottom: 1px solid var(--border-color);
 
     .header__left, .header__right {
       display: flex;
       align-items: center;
+      gap: 1rem;
     }
 
-    .header__left {
-      .close {
-        margin-right: 12px;
+    .conv-title {
+      font-weight: 500;
+      font-size: 1.1rem;
+      cursor: pointer;
+      max-width: 200px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.2s;
+      
+      &:hover {
+        color: var(--primary-color);
       }
+    }
+
+    .title-input {
+      width: 200px;
     }
   }
 
   .nav-btn {
     height: 2.5rem;
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
+    padding: 0 0.75rem;
     border-radius: 8px;
-    color: var(--gray-900);
+    color: var(--gray-800);
     cursor: pointer;
-    // font-size: 1rem;
-    width: auto;
-    transition: background-color 0.3s;
-    padding: 0.5rem 0.75rem;
-
-    .text {
-      margin-left: 10px;
-    }
+    transition: all 0.2s;
 
     &:hover {
-      background-color: var(--main-light-3);
+      background-color: var(--gray-100);
+    }
+
+    .icon {
+      font-size: 1rem;
     }
   }
 
   .model-select {
-    // color: var(--gray-900);
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--gray-100);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    max-width: 200px;
+
+    &:hover {
+      background-color: var(--gray-200);
+    }
 
     .text {
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.9rem;
+    }
+
+    .icon {
+      font-size: 0.8rem;
+      color: var(--gray-600);
     }
   }
 }
-.metas {
-  display: flex;
-  gap: 8px;
-}
-
-.my-panal {
-  position: absolute;
-  margin-top: 5px;
-  background-color: white;
-  border: 1px solid #ccc;
-  box-shadow: 0px 0px 10px 1px rgba(0, 0, 0, 0.05);
-  border-radius: 12px;
-  padding: 12px;
-  z-index: 11;
-  width: 280px;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-
-  .flex-center {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.3s;
-
-    &:hover {
-      background-color: var(--main-light-3);
-    }
-
-    .anticon {
-      margin-right: 8px;
-      font-size: 16px;
-    }
-    .ant-switch {
-      &.ant-switch-checked {
-        background-color: var(--main-500);
-      }
-    }
-  }
-}
-
-.my-panal.r0.top100 {
-  top: 100%;
-  right: 0;
-}
-
-.my-panal.l0.top100 {
-  top: 100%;
-  left: 0;
-}
-
-.chat-examples {
-  padding: 0 50px;
-  text-align: center;
-  position: absolute;
-  top: 20%;
-  width: 100%;
-  z-index: 9;
-  animation: slideInUp 0.5s ease-out;
-
-  h1 {
-    margin-bottom: 20px;
-    font-size: 1.2rem;
-    color: #333;
-  }
-
-  .opts {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-
-    .opt__button {
-      background-color: var(--gray-200);
-      color: #333;
-      padding: .5rem 1.5rem;
-      border-radius: 2rem;
-      cursor: pointer;
-      // border: 2px solid var(--main-light-4);
-      transition: background-color 0.3s;
-      // box-shadow: 0px 0px 10px 2px var(--main-light-4);
-
-
-      &:hover {
-        background-color: #f0f1f1;
-        // box-shadow: 0px 0px 10px 1px rgba(0, 0, 0, 0.1);
-      }
-    }
-  }
-
-}
-
-.example-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  justify-content: center;
-  margin-top: 20px;
-}
-
-.card {
-  position: relative;
-  width: 200px;
-  height: 250px;
-  border-radius: 14px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
-  cursor: pointer;
-}
-
-.bg {
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 190px;
-  height: 240px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(24px);
-  border-radius: 10px;
-  outline: 2px solid white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: bold;
-  z-index: 2;
-  text-align: center;
-  padding: 12px;
-  transition: transform 0.2s ease;
-}
-
-.card:hover .bg {
-  transform: scale(1.03);
-}
-
-.blob {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
-  background-color: #ff0000;
-  opacity: 1;
-  filter: blur(12px);
-  animation: blob-bounce 5s infinite ease;
-}
-
-@keyframes blob-bounce {
-  0% {
-    transform: translate(-100%, -100%) translate3d(0, 0, 0);
-  }
-  25% {
-    transform: translate(-100%, -100%) translate3d(100%, 0, 0);
-  }
-  50% {
-    transform: translate(-100%, -100%) translate3d(100%, 100%, 0);
-  }
-  75% {
-    transform: translate(-100%, -100%) translate3d(0, 100%, 0);
-  }
-  100% {
-    transform: translate(-100%, -100%) translate3d(0, 0, 0);
-  }
-}
-
 
 .chat-box {
+  flex: 1;
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
-  flex-grow: 1;
-  padding: 1rem 2rem;
-  display: flex;
-  flex-direction: column;
-  transition: max-width 0.3s ease;
+  padding: 1rem;
+  overflow-y: auto;
+  scroll-behavior: smooth;
 
   &.wide-screen {
     max-width: 1200px;
   }
 
-  &.font-smaller {
-    font-size: 14px;
+  .message-box {
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.3s ease-out;
 
-    .message-box {
-      font-size: 14px;
+    &.user {
+      .message-content {
+        flex-direction: row-reverse;
+      }
+      .message-text {
+        background-color: var(--primary-color);
+        color: white;
+      }
+    }
+
+    &.assistant {
+      .message-text {
+        background-color: var(--gray-100);
+        color: var(--gray-900);
+      }
+    }
+
+    .message-content {
+      display: flex;
+      gap: 1rem;
+      max-width: 100%;
+    }
+
+    .message-avatar {
+      flex-shrink: 0;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 50%;
+      background-color: var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      color: var(--gray-700);
+    }
+
+    .message-text {
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      max-width: calc(100% - 3.5rem);
+      line-height: 1.6;
+      word-break: break-word;
     }
   }
+}
 
-  &.font-larger {
-    font-size: 16px;
+.chat-examples {
+  padding: 0 1rem;
+  text-align: center;
+  margin-top: 20%;
 
-    .message-box {
-      font-size: 16px;
+  h1 {
+    margin-bottom: 2rem;
+    font-size: 1.5rem;
+    color: var(--gray-900);
+    font-weight: 500;
+  }
+
+  .example-cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .card {
+    position: relative;
+    width: 180px;
+    height: 120px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.2s;
+
+    &:hover {
+      transform: translateY(-5px);
+    }
+
+    .bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 2;
+      text-align: center;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .blob {
+      position: absolute;
+      z-index: 1;
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      opacity: 0.1;
+      filter: blur(12px);
+      animation: blob-bounce 8s infinite ease;
     }
   }
 }
@@ -958,205 +914,249 @@ const selectModel = (provider, name) => {
   position: sticky;
   bottom: 0;
   width: 100%;
-  margin: 0 auto;
-  padding: 4px 2rem 0 2rem;
+  padding: 1rem 0;
+  background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.9) 80%, rgba(255,255,255,0) 100%);
 
   .message-input-wrapper {
     width: 100%;
     max-width: 800px;
     margin: 0 auto;
-    background-color: white;
-    animation: width 0.3s ease-in-out;
+    padding: 0 1rem;
 
     &.wide-screen {
       max-width: 1200px;
     }
 
-    .note {
-      width: 100%;
-      font-size: small;
-      text-align: center;
-      padding: 0;
-      color: #ccc;
-      margin-top: 4px;
-      margin-bottom: 0;
-      user-select: none;
-    }
-  }
-}
-
-.ant-dropdown-link {
-  color: var(--gray-900);
-  cursor: pointer;
-}
-
-.action-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font-size: 14px;
-  color: var(--text-color);
-  background-color: var(--gray-100);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: var(--gray-200);
-  }
-
-  .icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-  }
-
-  .text {
-    font-size: 14px;
-    white-space: nowrap;
-  }
-}
-
-.chat::-webkit-scrollbar {
-  position: absolute;
-  width: 4px;
-}
-
-.chat::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 4px;
-}
-
-.chat::-webkit-scrollbar-thumb {
-  background: var(--gray-400);
-  border-radius: 4px;
-}
-
-.chat::-webkit-scrollbar-thumb:hover {
-  background: rgb(100, 100, 100);
-  border-radius: 4px;
-}
-
-.chat::-webkit-scrollbar-thumb:active {
-  background: rgb(68, 68, 68);
-  border-radius: 4px;
-}
-
-.loading-dots {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-dots div {
-  width: 8px;
-  height: 8px;
-  margin: 0 4px;
-  background-color: #666;
-  border-radius: 50%;
-  opacity: 0.3;
-  animation: pulse 0.5s infinite ease-in-out both;
-}
-
-.loading-dots div:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
-.loading-dots div:nth-child(2) {
-  animation-delay: -0.16s;
-}
-
-@keyframes pulse {
-  0%, 80%, 100% {
-    transform: scale(0.8);
-    opacity: 0.3;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes loading {0%,80%,100%{transform:scale(0.5);}40%{transform:scale(1);}}
-
-.slide-out-left{-webkit-animation:slide-out-left .2s cubic-bezier(.55,.085,.68,.53) both;animation:slide-out-left .5s cubic-bezier(.55,.085,.68,.53) both}
-.swing-in-top-fwd {
-  -webkit-animation: swing-in-top-fwd 0.3s cubic-bezier(0.175, 0.885, 0.320, 1.275) both;
-  animation: swing-in-top-fwd 0.3s cubic-bezier(0.175, 0.885, 0.320, 1.275) both;
-}
-
-@keyframes swing-in-top-fwd {
-  0% {
-    -webkit-transform: rotateX(-100deg);
-    transform: rotateX(-100deg);
-    -webkit-transform-origin: top;
-    transform-origin: top;
-    opacity: 0;
-  }
-  100% {
-    -webkit-transform: rotateX(0deg);
-    transform: rotateX(0deg);
-    -webkit-transform-origin: top;
-    transform-origin: top;
-    opacity: 1;
-  }
-}
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes slideInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-@media (max-width: 520px) {
-  .chat {
-    height: calc(100vh - 60px);
-  }
-
-  .chat-container .chat .chat-header {
-    background: var(--main-light-4);
-    .header__left, .header__right {
-      gap: 24px;
-    }
-
-    .nav-btn {
-      font-size: 1.3rem;
-      padding: 0;
-
-      &:hover {
-        background-color: transparent;
-        color: black;
-      }
-
-      .text {
-        display: none;
-      }
-    }
-  }
-
-  .bottom {
-    padding: 0.5rem 0.5rem;
-
     .input-box {
-      border-radius: 8px;
-      padding: 0.5rem;
+      background-color: white;
+      border-radius: 12px;
+      padding: 0.75rem;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+      border: 1px solid var(--border-color);
 
-      textarea.user-input {
-        padding: 0.5rem 0;
+      .message-input {
+        border: none;
+        box-shadow: none;
+        resize: none;
+        padding: 0;
+        font-size: 0.95rem;
+        line-height: 1.6;
+
+        &:focus {
+          box-shadow: none;
+        }
+      }
+
+      .send-button {
+        height: 2.5rem;
+        padding: 0 1.25rem;
       }
     }
+
     .note {
-      display: none;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--gray-500);
+      margin-top: 0.5rem;
     }
   }
 }
 
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  .search-switch {
-    margin-right: 8px;
+/* 文档展示区域 */
+.document-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-left: 4px solid #007bff;
+  color: #333;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+  h4 {
+    font-size: 1em;
+    margin-bottom: 0.5em;
+    color: #007bff;
+    font-weight: bold;
   }
+
+  .doc-item {
+    margin-bottom: 1em;
+    padding: 1em;
+    background-color: #fff;
+    border: 1px solid #e1e1e8;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+    position: relative;
+    font-family: 'Arial', sans-serif;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -4px;
+      right: -4px;
+      bottom: -4px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      transition: border-color 0.3s ease;
+    }
+
+    &:hover::before {
+      border-color: #007bff;
+    }
+  }
+}
+
+/* 联网搜索展示样式 */
+.search-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #fbfbfb;
+  border-left: 4px solid #28a745;
+  color: #333;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+
+  h4 {
+    font-size: 1em;
+    margin-bottom: 0.5em;
+    color: #28a745;
+    font-weight: bold;
+  }
+
+  .search-list {
+    list-style-type: none;
+    padding-left: 0;
+  }
+
+  .search-item {
+    margin-bottom: 0.5em;
+    font-family: 'Arial', sans-serif;
+    color: #555;
+  }
+}
+
+/* Cypher 查询展示区域 */
+.cypher-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #fbfbfb;
+  border-left: 4px solid #e67e22;
+  color: #333;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+
+  h4 {
+    font-size: 1em;
+    margin-bottom: 0.5em;
+    color: #e67e22;
+    font-weight: bold;
+  }
+
+  .cypher-item {
+    margin-bottom: 0.5em;
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: #fff;
+    border: 1px solid #eee;
+    padding: 1em;
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+  }
+}
+
+/* Cypher 查询结果展示区域 */
+.cypher-result-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-left: 4px solid #8e44ad;
+  color: #333;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+
+  h4 {
+    font-size: 1em;
+    margin-bottom: 0.5em;
+    color: #8e44ad;
+    font-weight: bold;
+  }
+
+  .cypher-result-item {
+    margin-bottom: 0.5em;
+    font-family: 'Courier New', monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: #fff;
+    border: 1px solid #eee;
+    padding: 1em;
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+  }
+}
+
+/* 评分反馈区域 */
+.feedback-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #f0f0f0;
+  font-size: 0.85rem;
+
+  .feedback-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    .feedback-label {
+      color: #666;
+    }
+
+    .ant-btn {
+      min-width: 2.5rem;
+      height: 1.75rem;
+      font-size: 0.8rem;
+    }
+  }
+
+  .feedback-result {
+    color: #888;
+    font-size: 0.8rem;
+  }
+}
+
+/* 评分模态框 */
+.feedback-modal {
+  .modal-content {
+    .rating-section, .reason-section {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+
+      > span {
+        width: 80px;
+        flex-shrink: 0;
+      }
+    }
+  }
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blob-bounce {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  25% { transform: translate(-50%, -50%) scale(1.2); }
+  50% { transform: translate(-50%, -50%) scale(0.9); }
+  75% { transform: translate(-50%, -50%) scale(1.1); }
+  100% { transform: translate(-50%, -50%) scale(1); }
 }
 
 .scrollable-menu {
@@ -1169,61 +1169,78 @@ const selectModel = (provider, name) => {
 
   &::-webkit-scrollbar-track {
     background: transparent;
-    border-radius: 3px;
   }
 
   &::-webkit-scrollbar-thumb {
     background: var(--gray-400);
     border-radius: 3px;
   }
+}
 
-  &::-webkit-scrollbar-thumb:hover {
-    background: var(--gray-500);
+@media (max-width: 768px) {
+  .chat-header {
+    padding: 0 1rem;
+    
+    .conv-title {
+      max-width: 150px;
+    }
+  }
+
+  .chat-box {
+    padding: 0.75rem;
+  }
+
+  .bottom {
+    padding: 0.75rem 0;
+    
+    .message-input-wrapper {
+      padding: 0 0.75rem;
+      
+      .input-box {
+        padding: 0.5rem;
+      }
+    }
+  }
+
+  .chat-examples {
+    h1 {
+      font-size: 1.2rem;
+    }
+    
+    .card {
+      width: 140px;
+      height: 100px;
+    }
   }
 }
 
-.model-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background-color: var(--gray-100);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background-color: var(--gray-200);
+@media (max-width: 480px) {
+  .chat-header {
+    .header__left, .header__right {
+      gap: 0.5rem;
+    }
+    
+    .nav-btn .text,
+    .model-select .text {
+      display: none;
+    }
   }
-
-  .icon {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    color: var(--primary-color);
-  }
-
-  .text {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-width: 160px;
-    color: var(--text-color);
+  
+  .note {
+    display: none;
   }
 }
-
 </style>
 
 <style lang="less">
-// 添加全局样式以确保滚动功能在dropdown内正常工作
 .ant-dropdown-menu {
   &.scrollable-menu {
     max-height: 300px;
     overflow-y: auto;
   }
+  
+  .ant-dropdown-menu-item {
+    padding: 0.5rem 1rem;
+  }
 }
 </style>
-
-

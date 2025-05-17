@@ -15,7 +15,7 @@ from server.db.models.knowledge_base_model import KnowledgeBaseModel
 from server.db.models.knowledge_file_model import KnowledgeFileModel
 from server.db.models.knowledge_file_model import FileDocModel
 from fastapi import Body
-from sqlalchemy import delete
+from sqlalchemy import asc, delete
 import uuid
 from sqlalchemy.dialects.postgresql import UUID
 from typing import List
@@ -93,7 +93,6 @@ async def create_conversation(
 
 async def get_user_conversations(
         user_id: str,
-        chat_types: str = Query(...),
         session: AsyncSession = Depends(get_async_db)
 ):
     """
@@ -102,8 +101,7 @@ async def get_user_conversations(
     async with session as async_session:
         result = await async_session.execute(
             select(ConversationModel)
-            .where(ConversationModel.user_id == user_id,
-                   ConversationModel.chat_type == chat_types)
+            .where(ConversationModel.user_id == user_id)
             .order_by(desc(ConversationModel.create_time))
         )
         conversations = result.scalars().all()
@@ -134,6 +132,7 @@ async def get_conversation_messages(
         if chat_types:
             query = query.where(MessageModel.chat_type)
 
+        query = query.order_by(asc(MessageModel.create_time))
         result = await async_session.execute(query)
         messages = result.scalars().all()
         if not messages:
